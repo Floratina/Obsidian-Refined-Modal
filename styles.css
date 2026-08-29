@@ -71,6 +71,33 @@ body.modal-open::after {
   transition: opacity var(--bg-in-dur) var(--bg-in-ease);
 }
 
+/* 1c. 启动预热的小区域 (由 main.js 的 warmUpCompositor 创建/销毁,尺寸也由它写)
+ *
+ * 刻意不给填充色:backdrop-filter 模糊的是身后的东西,而它压着的是状态栏
+ * 角落的纯色区域 —— 纯色模糊之后还是同一个纯色,肉眼看不出来。若盖一层
+ * 不透明背景,反而可能被 Chromium 判定为滤镜结果被完全遮挡而跳过执行,
+ * 预热就白做了(上一版用 opacity:0.001 失败就是这个原因)。
+ *
+ * 下面这段滤镜必须和 body::after 的**逐字一致**。只要有任何差别,编译出来的
+ * 就是另一个 shader,预热的那个用不上。改一处记得改两处。 */
+.flra-warmup {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  z-index: 100;                     /* 必须真的被绘制,不能被别的元素盖住 */
+  pointer-events: none;
+  backdrop-filter:
+    blur(var(--bg-blur-pixels))
+    brightness(calc(1 - var(--bg-dim-opacity)))
+    contrast(var(--bg-contrast))
+    saturate(var(--bg-saturation));
+  -webkit-backdrop-filter:
+    blur(var(--bg-blur-pixels))
+    brightness(calc(1 - var(--bg-dim-opacity)))
+    contrast(var(--bg-contrast))
+    saturate(var(--bg-saturation));
+}
+
 /* ===== 2. 弹窗层级矫正 ===== */
 body .modal-container {
   z-index: 60 !important;
