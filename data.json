@@ -1,0 +1,17 @@
+{
+  "bgBlurPixels": 15,
+  "bgDimOpacity": 0,
+  "bgContrast": 1,
+  "bgSaturation": 1.08,
+  "bgScaleTarget": 1.005,
+  "modalInDur": 260,
+  "modalExitDur": 265,
+  "bgInDur": 225,
+  "bgOutDur": 115,
+  "modalLargeScale": 1.05,
+  "modalExitScale": 1.03,
+  "modalInEase": "cubic-bezier(.04,.5,.23,1)",
+  "modalOutEase": "cubic-bezier(.09,.78,.23,1)",
+  "bgInEase": "cubic-bezier(0.18,0.89,0.32,1)",
+  "bgOutEase": "cubic-bezier(0.18,0.89,0.32,1)"
+}

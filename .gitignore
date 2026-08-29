@@ -1,0 +1,10 @@
+# Claude Code 的本地会话配置,不入库
+.claude/
+
+# 手动备份已由 git 接管
+*.bak
+
+# 注意:data.json 是有意纳入版本管理的。
+# 它存的是手调出来的动画参数,本身就是想被备份的东西。
+# 如果嫌每次拖滑块都弄脏工作区,可以:
+#   git update-index --skip-worktree data.json

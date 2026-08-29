@@ -1,4 +1,7 @@
-/* ===== 核心参数配置 ===== */
+/* ===== 核心参数配置 =====
+ * 下面这些是「默认值」。插件设置页会把用户调整后的值以行内样式写到 body 上,
+ * 优先级高于这里。没装设置(data.json 不存在)时就回退到这份默认值。
+ */
 body {
   /* 背景模糊配置 */
   --bg-blur-pixels: 15px;           /* 背景模糊像素 */
@@ -15,7 +18,7 @@ body {
 
   /* --- 时间设置 --- */
   --modal-in-dur:   260ms;          /* 弹窗入场耗时 */
-  --modal-exit-dur: 185ms;          /* 弹窗出场耗时 (如果你改成 1200ms，JS 现在能跟上了) */
+  --modal-exit-dur: 185ms;          /* 弹窗出场耗时 (副本存活时间由 JS 读取本值自动跟随) */
   --bg-in-dur:      225ms;          /* 背景进入耗时 */
   --bg-out-dur:     115ms;          /* 背景退出耗时 */
 
@@ -93,6 +96,20 @@ body.modal-open .modal-container:not(.modal-zombie) .prompt {
 
 /* ===== 4. 离场动画 (解决顿挫并同步时间) ===== */
 
+/* 僵尸副本的定位与层级。
+ * 这些以前是 JS 用行内样式写死的,但行内样式压不过上面那条
+ * `body .modal-container { z-index: 60 !important }`,导致 z-index 实际无效。
+ * 这里用更高的特异性 (0,3,1) + !important 才真正生效。 */
+body .modal-container.modal-zombie {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;             /* 副本不可点 */
+  z-index: 999 !important;          /* 压过 body .modal-container 的 z-index:60 !important */
+}
+
 /* 僵尸容器负责整体淡出和缩放的协调 */
 body .modal-zombie {
   animation: zombie-main-exit var(--modal-exit-dur) var(--modal-out-ease) forwards !important;
@@ -130,8 +147,23 @@ body .modal-zombie .modal-content {
   to   { opacity: 0; }
 }
 
-/* 减弱动画模式适配 */
+/* 减弱动画模式适配
+ * 必须带 !important:设置页会把时长以行内样式写到 body 上,
+ * 普通声明压不过行内样式,无障碍设置就会失效。 */
 @media (prefers-reduced-motion: reduce) {
-  body { --modal-in-dur: 0ms; --modal-exit-dur: 0ms; }
+  body { --modal-in-dur: 0ms !important; --modal-exit-dur: 0ms !important; }
   .app-container { transition: none !important; transform: none !important; filter: none !important; }
+}
+
+/* ===== 5. 设置面板 ===== */
+
+/* 曲线输入框:等宽字体更好对齐,也需要比默认更宽 */
+.flra-ease-input {
+  width: 16em;
+  font-family: var(--font-monospace);
+}
+
+/* 手写的曲线无法被 CSS 解析时的提示 */
+.flra-invalid {
+  border-color: var(--text-error) !important;
 }
