@@ -1,0 +1,9 @@
+{
+  "id": "FLRA-animation-helper",
+  "name": "FLRA Animation Helper",
+  "version": "0.1.0",
+  "minAppVersion": "1.6.0",
+  "author": "ChatGPT",
+  "main": "main.js",
+  "isDesktopOnly": true
+}

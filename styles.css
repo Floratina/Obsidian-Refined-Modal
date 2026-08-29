@@ -1,0 +1,137 @@
+/* ===== 核心参数配置 ===== */
+body {
+  /* 背景模糊配置 */
+  --bg-blur-pixels: 15px;           /* 背景模糊像素 */
+  --bg-dim-opacity: 0;           /* 背景变暗程度 */
+  --bg-contrast: 1.00;              /* 背景对比度 */
+  --bg-saturation: 1.05;            /* 背景饱和度 */
+  --bg-scale-target: 1.005;         /* 背景缩放目标值 */
+  
+  /* --- 动画曲线 (Cubic Bezier) --- */
+  --modal-in-ease:  cubic-bezier(.04,.5,.23,1);      /* 弹窗入场曲线 */
+  --modal-out-ease: cubic-bezier(.07,.86,.32,1);     /* 弹窗出场曲线 */
+  --bg-in-ease:     cubic-bezier(0.18, 0.89, 0.32, 1);    /* 背景进入曲线 */
+  --bg-out-ease:    cubic-bezier(0.18, 0.89, 0.32, 1);    /* 背景恢复曲线 */
+
+  /* --- 时间设置 --- */
+  --modal-in-dur:   260ms;          /* 弹窗入场耗时 */
+  --modal-exit-dur: 185ms;          /* 弹窗出场耗时 (如果你改成 1200ms，JS 现在能跟上了) */
+  --bg-in-dur:      225ms;          /* 背景进入耗时 */
+  --bg-out-dur:     115ms;          /* 背景退出耗时 */
+
+  /* --- 缩放幅度 --- */
+  --modal-large-scale: 1.05;        /* 入场时的起始尺寸 */
+  --modal-exit-scale:  1.02;        /* 出场时的结束尺寸 */
+}
+
+/* ===== 1. 背景层效果 (app-container) ===== */
+
+/* 1a. 缩放动画 (仅 transform，纯 GPU) */
+.app-container {
+  transform-origin: center 30%;
+  backface-visibility: hidden;
+  transition: transform var(--bg-out-dur) var(--bg-out-ease);
+}
+
+body.modal-open .app-container {
+  will-change: transform;
+  transition: transform var(--bg-in-dur) var(--bg-in-ease);
+  transform: scale(var(--bg-scale-target));
+  pointer-events: none;
+}
+
+/* 1b. 模糊遮罩 (backdrop-filter 始终满值，只过渡 opacity，纯 GPU) */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  backdrop-filter:
+    blur(var(--bg-blur-pixels))
+    brightness(calc(1 - var(--bg-dim-opacity)))
+    contrast(var(--bg-contrast))
+    saturate(var(--bg-saturation));
+  -webkit-backdrop-filter:
+    blur(var(--bg-blur-pixels))
+    brightness(calc(1 - var(--bg-dim-opacity)))
+    contrast(var(--bg-contrast))
+    saturate(var(--bg-saturation));
+  opacity: 0;
+  pointer-events: none;
+  backface-visibility: hidden;
+  transition: opacity var(--bg-out-dur) var(--bg-out-ease);
+}
+
+body.modal-open::after {
+  will-change: opacity;
+  opacity: 1;
+  transition: opacity var(--bg-in-dur) var(--bg-in-ease);
+}
+
+/* ===== 2. 弹窗层级矫正 ===== */
+body .modal-container {
+  z-index: 60 !important;
+}
+
+/* ===== 3. 入场动画 (由大变小) ===== */
+body.modal-open .modal-container:not(.modal-zombie) .modal,
+body.modal-open .modal-container:not(.modal-zombie) .prompt,
+body.modal-open .modal-container:not(.modal-zombie) .suggestion-container,
+body.modal-open .modal-container:not(.modal-zombie) .prompt-container {
+  animation: modal-scale-down var(--modal-in-dur) var(--modal-in-ease) backwards !important;
+  transform-origin: center center;
+}
+
+body.modal-open .modal-container:not(.modal-zombie) .prompt {
+  transform-origin: center 40%;
+}
+
+@keyframes modal-scale-down {
+  from { opacity: 0; transform: scale(var(--modal-large-scale)); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ===== 4. 离场动画 (解决顿挫并同步时间) ===== */
+
+/* 僵尸容器负责整体淡出和缩放的协调 */
+body .modal-zombie {
+  animation: zombie-main-exit var(--modal-exit-dur) var(--modal-out-ease) forwards !important;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+/* 背景遮罩同步淡出，时间也必须一致 */
+body .modal-zombie .modal-bg {
+  animation: zombie-fade-out var(--modal-exit-dur) var(--modal-out-ease) forwards !important;
+  will-change: opacity;
+  backface-visibility: hidden;
+}
+
+/* 给内部实体(包括二级弹窗内容)统一缩放中心 */
+body .modal-zombie .modal,
+body .modal-zombie .prompt,
+body .modal-zombie .suggestion-container,
+body .modal-zombie .prompt-container,
+body .modal-zombie .modal-content {
+  transform-origin: center center !important;
+  /* 已经在父级做过动画了，这里确保它们不乱动 */
+  animation: none !important;
+}
+
+/* 核心出场动画：透明度从1到0，缩放从1到目标值 */
+@keyframes zombie-main-exit {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(var(--modal-exit-scale)); }
+}
+
+/* 遮罩专门的淡出 */
+@keyframes zombie-fade-out {
+  from { opacity: 0.5; }
+  to   { opacity: 0; }
+}
+
+/* 减弱动画模式适配 */
+@media (prefers-reduced-motion: reduce) {
+  body { --modal-in-dur: 0ms; --modal-exit-dur: 0ms; }
+  .app-container { transition: none !important; transform: none !important; filter: none !important; }
+}
