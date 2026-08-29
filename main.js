@@ -44,7 +44,19 @@ const DEFAULTS = {
   menuExitDur: 120,
   menuExitScale: 0.97,
   menuOutEase: "cubic-bezier(.3,0,.8,.5)",
+
+  // 毛玻璃
+  glassEnabled: false,
+  glassTintEnabled: true,
+  glassAlpha: 72,
+  glassBlur: 12,
+  glassBrightness: 1.0,
+  glassContrast: 1.0,
+  glassSaturation: 1.2,
 };
+
+/* 布尔开关:不是 CSS 变量,靠 body 上的类生效 */
+const CLASS_KEYS = new Set(["menuAnimEnabled", "glassEnabled", "glassTintEnabled"]);
 
 /* 设置键 -> [CSS 变量名, 单位] */
 const VAR_MAP = {
@@ -72,8 +84,13 @@ const VAR_MAP = {
   menuExitDur: ["--menu-exit-dur", "ms"],
   menuExitScale: ["--menu-exit-scale", ""],
   menuOutEase: ["--menu-out-ease", ""],
-  // 注意:menuAnimEnabled 是布尔总开关,不是 CSS 变量,故意不在这张表里。
-  // 它由 applyMenuClass() 切换 body 上的类来生效。
+  glassAlpha: ["--flra-glass-alpha", "%"],
+  glassBlur: ["--flra-glass-blur", "px"],
+  glassBrightness: ["--flra-glass-brightness", ""],
+  glassContrast: ["--flra-glass-contrast", ""],
+  glassSaturation: ["--flra-glass-saturation", ""],
+  // 注意:CLASS_KEYS 里那几个布尔开关不是 CSS 变量,故意不在这张表里。
+  // 它们由 applyBodyClasses() 切换 body 上的类来生效。
 };
 
 /*
@@ -146,26 +163,29 @@ module.exports = class FlraAnimationHelper extends Plugin {
 
   applyVars() {
     for (const key of Object.keys(VAR_MAP)) this.applyVar(key);
-    this.applyMenuClass();
+    this.applyBodyClasses();
   }
 
-  /** 菜单动画总开关:CSS 那边靠 body.flra-menu-anim 生效 */
-  applyMenuClass() {
-    document.body.classList.toggle("flra-menu-anim", !!this.settings.menuAnimEnabled);
+  /** 几个布尔开关:CSS 那边靠 body 上的类生效 */
+  applyBodyClasses() {
+    const b = document.body;
+    b.classList.toggle("flra-menu-anim", !!this.settings.menuAnimEnabled);
+    b.classList.toggle("flra-glass", !!this.settings.glassEnabled);
+    b.classList.toggle("flra-glass-tint", !!this.settings.glassTintEnabled);
   }
 
   clearVars() {
     for (const key of Object.keys(VAR_MAP)) {
       document.body.style.removeProperty(VAR_MAP[key][0]);
     }
-    document.body.classList.remove("flra-menu-anim");
+    document.body.classList.remove("flra-menu-anim", "flra-glass", "flra-glass-tint");
   }
 
-  /** 立即生效 + 延迟落盘。传 key 只更新那一个变量(拖滑块时每帧都会调) */
+  /** 立即生效 + 延迟落盘。传 key 只更新那一项(拖滑块时每帧都会调) */
   applyAndSave(key) {
-    if (key === "menuAnimEnabled") this.applyMenuClass();
-    else if (key) this.applyVar(key);
-    else this.applyVars();
+    if (!key) this.applyVars();
+    else if (CLASS_KEYS.has(key)) this.applyBodyClasses();
+    else this.applyVar(key);
     this.saveDebounced();
   }
 
@@ -350,19 +370,65 @@ module.exports = class FlraAnimationHelper extends Plugin {
 };
 
 /* ===== 设置面板 ===== */
+/*
+ * 设置面板。
+ *
+ * 参数已经有 32 项,平铺一屏根本扫不完,所以做成顶部标签页:
+ * 「预览」常驻在标签栏上方(调任何一组参数都要用它),「重置全部」常驻在底部,
+ * 中间的内容区随标签切换重绘。
+ */
+
+const TABS = [
+  ["bg", "背景"],
+  ["modal", "弹窗"],
+  ["menu", "右键菜单"],
+  ["glass", "毛玻璃"],
+];
 
 class FlraSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
+    this.activeTab = TABS[0][0];
   }
 
   display() {
     const { containerEl } = this;
     containerEl.empty();
 
-    /* --- 预览 --- */
-    const preview = new Setting(containerEl)
+    this.renderPreview(containerEl);
+
+    const bar = containerEl.createDiv({ cls: "flra-tab-bar" });
+    const body = containerEl.createDiv({ cls: "flra-tab-body" });
+
+    for (const [id, label] of TABS) {
+      const tab = bar.createDiv({ cls: "flra-tab", text: label });
+      tab.toggleClass("is-active", this.activeTab === id);
+      tab.addEventListener("click", () => {
+        if (this.activeTab === id) return;
+        this.activeTab = id;
+        // 只重画标签状态和内容区,常驻的预览/重置不动
+        for (const el of Array.from(bar.children)) el.toggleClass("is-active", el === tab);
+        body.empty();
+        this.renderTab(body);
+      });
+    }
+
+    this.renderTab(body);
+    this.renderResetAll(containerEl);
+  }
+
+  renderTab(el) {
+    if (this.activeTab === "bg") this.renderBg(el);
+    else if (this.activeTab === "modal") this.renderModal(el);
+    else if (this.activeTab === "menu") this.renderMenu(el);
+    else if (this.activeTab === "glass") this.renderGlass(el);
+  }
+
+  /* ===== 常驻区 ===== */
+
+  renderPreview(el) {
+    const preview = new Setting(el)
       .setName("预览动画")
       .setDesc("打开一个测试弹窗,直接看当前参数的进出场效果。")
       .addButton((b) =>
@@ -373,267 +439,19 @@ class FlraSettingTab extends PluginSettingTab {
       );
 
     // 设置面板被拖到独立窗口时,测试弹窗未必开在同一个窗口里
-    if (containerEl.ownerDocument !== document) {
+    if (el.ownerDocument !== document) {
       preview.setDesc(
         "打开一个测试弹窗,直接看当前参数的进出场效果。" +
           "你的设置面板在独立窗口里,测试弹窗可能出现在主窗口 —— 没看到的话切过去看看。"
       );
     }
+  }
 
-    /* --- 背景 --- */
-    new Setting(containerEl).setName("背景").setHeading();
-
-    this.slider(containerEl, {
-      name: "模糊强度",
-      desc: "弹窗打开时背景的高斯模糊半径。",
-      key: "bgBlurPixels",
-      min: 0,
-      max: 40,
-      step: 1,
-      suffix: "px",
-    });
-
-    this.slider(containerEl, {
-      name: "变暗程度",
-      desc: "0 = 完全不变暗,100 = 全黑。",
-      key: "bgDimOpacity",
-      min: 0,
-      max: 100,
-      step: 1,
-      scale: 100,
-      suffix: "%",
-    });
-
-    this.slider(containerEl, {
-      name: "对比度",
-      desc: "100% 为原始对比度。",
-      key: "bgContrast",
-      min: 50,
-      max: 150,
-      step: 1,
-      scale: 100,
-      suffix: "%",
-    });
-
-    this.slider(containerEl, {
-      name: "饱和度",
-      desc: "100% 为原始饱和度,略微提高能让模糊后的背景不发灰。",
-      key: "bgSaturation",
-      min: 0,
-      max: 200,
-      step: 1,
-      scale: 100,
-      suffix: "%",
-    });
-
-    this.slider(containerEl, {
-      name: "背景缩放",
-      desc: "弹窗打开时背景轻微放大,营造层次感。100% 为不缩放。",
-      key: "bgScaleTarget",
-      min: 100,
-      max: 105,
-      step: 0.1,
-      scale: 100,
-      suffix: "%",
-    });
-
-    /* --- 时间 --- */
-    new Setting(containerEl).setName("时间").setHeading();
-
-    this.slider(containerEl, {
-      name: "弹窗入场",
-      desc: "弹窗出现时的动画耗时。",
-      key: "modalInDur",
-      min: 0,
-      max: 800,
-      step: 5,
-      suffix: "ms",
-    });
-
-    this.slider(containerEl, {
-      name: "弹窗出场",
-      desc: "弹窗消失时的动画耗时。退场副本的存活时间会自动跟随这个值。",
-      key: "modalExitDur",
-      min: 0,
-      max: 800,
-      step: 5,
-      suffix: "ms",
-    });
-
-    this.slider(containerEl, {
-      name: "背景进入",
-      desc: "背景模糊与缩放的进入耗时。",
-      key: "bgInDur",
-      min: 0,
-      max: 800,
-      step: 5,
-      suffix: "ms",
-    });
-
-    this.slider(containerEl, {
-      name: "背景退出",
-      desc: "背景模糊与缩放的恢复耗时。通常比进入更短会更利落。",
-      key: "bgOutDur",
-      min: 0,
-      max: 800,
-      step: 5,
-      suffix: "ms",
-    });
-
-    /* --- 缩放 --- */
-    new Setting(containerEl).setName("弹窗缩放").setHeading();
-
-    this.slider(containerEl, {
-      name: "入场起始尺寸",
-      desc: "弹窗从这个尺寸缩到 100%。大于 100% 是「由大变小」,小于则是「弹出」。",
-      key: "modalLargeScale",
-      min: 80,
-      max: 130,
-      step: 0.5,
-      scale: 100,
-      suffix: "%",
-    });
-
-    this.slider(containerEl, {
-      name: "出场结束尺寸",
-      desc: "弹窗从 100% 缩放到这个尺寸后消失。",
-      key: "modalExitScale",
-      min: 80,
-      max: 130,
-      step: 0.5,
-      scale: 100,
-      suffix: "%",
-    });
-
-    /* --- 缓动曲线 --- */
-    new Setting(containerEl).setName("缓动曲线").setHeading();
-
-    this.ease(containerEl, {
-      name: "弹窗入场曲线",
-      key: "modalInEase",
-    });
-    this.ease(containerEl, {
-      name: "弹窗出场曲线",
-      key: "modalOutEase",
-    });
-    this.ease(containerEl, {
-      name: "背景进入曲线",
-      key: "bgInEase",
-    });
-    this.ease(containerEl, {
-      name: "背景退出曲线",
-      key: "bgOutEase",
-    });
-
-    /* --- 右键菜单 --- */
-    new Setting(containerEl).setName("右键菜单").setHeading();
-
-    let menuToggle;
-    new Setting(containerEl)
-      .setName("启用右键菜单动画")
-      .setDesc(
-        "给右键菜单加上入场和退场动画。退场动画是插件独有的 —— " +
-          "菜单关闭时会被直接从 DOM 上摘掉,纯 CSS 没有作用对象,做不到这件事。"
-      )
-      .addToggle((t) => {
-        menuToggle = t;
-        t.setValue(this.plugin.settings.menuAnimEnabled).onChange((v) => {
-          this.plugin.settings.menuAnimEnabled = v;
-          this.plugin.applyAndSave("menuAnimEnabled");
-        });
-      })
-      .addExtraButton((b) =>
-        b
-          .setIcon("rotate-ccw")
-          .setTooltip("恢复默认值(关闭)")
-          .onClick(() => {
-            this.plugin.settings.menuAnimEnabled = DEFAULTS.menuAnimEnabled;
-            menuToggle.setValue(DEFAULTS.menuAnimEnabled);
-            this.plugin.applyAndSave("menuAnimEnabled");
-          })
-      );
-
-    this.slider(containerEl, {
-      name: "淡入时长",
-      desc: "菜单透明度从 0 到 1 的耗时。",
-      key: "menuFadeDur",
-      min: 0,
-      max: 800,
-      step: 5,
-      suffix: "ms",
-    });
-
-    this.slider(containerEl, {
-      name: "滑动时长",
-      desc: "菜单滑动到位、同时展开裁剪的耗时。方向自动跟随菜单的展开方向。",
-      key: "menuSlideDur",
-      min: 0,
-      max: 800,
-      step: 5,
-      suffix: "ms",
-    });
-
-    this.slider(containerEl, {
-      name: "缩放时长",
-      desc: "菜单缩放到原尺寸的耗时。可以和上面两项设成不同值,做出错落感。",
-      key: "menuScaleDur",
-      min: 0,
-      max: 800,
-      step: 5,
-      suffix: "ms",
-    });
-
-    this.slider(containerEl, {
-      name: "滑动距离",
-      desc: "菜单入场时从多远处滑过来。向下展开的菜单从下方滑上来,向上展开的从上方滑下去。",
-      key: "menuSlideDistance",
-      min: 0,
-      max: 80,
-      step: 1,
-      suffix: "px",
-    });
-
-    this.slider(containerEl, {
-      name: "缩放起始尺寸",
-      desc: "菜单从这个尺寸放大到 100%。",
-      key: "menuScaleStart",
-      min: 50,
-      max: 130,
-      step: 0.5,
-      scale: 100,
-      suffix: "%",
-    });
-
-    this.ease(containerEl, { name: "菜单入场曲线", key: "menuInEase" });
-
-    this.slider(containerEl, {
-      name: "退场时长",
-      desc: "菜单消失时的动画耗时。",
-      key: "menuExitDur",
-      min: 0,
-      max: 800,
-      step: 5,
-      suffix: "ms",
-    });
-
-    this.slider(containerEl, {
-      name: "退场结束尺寸",
-      desc: "菜单从 100% 缩放到这个尺寸后消失。",
-      key: "menuExitScale",
-      min: 50,
-      max: 130,
-      step: 0.5,
-      scale: 100,
-      suffix: "%",
-    });
-
-    this.ease(containerEl, { name: "菜单退场曲线", key: "menuOutEase" });
-
-    /* --- 全局重置 --- */
-    // 放在最底部而不是顶部:这是破坏性操作,不该出现在容易误点的位置
-    new Setting(containerEl)
+  renderResetAll(el) {
+    // 破坏性操作,放在最底部而不是顶部,不该出现在容易误点的位置
+    new Setting(el)
       .setName("重置全部参数")
-      .setDesc("把上面所有参数一次性恢复到插件默认值。")
+      .setDesc("把所有标签页里的参数一次性恢复到插件默认值。")
       .addButton((b) =>
         b
           .setButtonText("重置全部")
@@ -641,7 +459,7 @@ class FlraSettingTab extends PluginSettingTab {
           .onClick(() => {
             new ConfirmModal(this.app, {
               title: "重置全部参数",
-              body: "所有参数都会恢复到插件默认值,当前手调的数值会丢失,且无法撤销。",
+              body: "所有标签页里的参数都会恢复到插件默认值,当前手调的数值会丢失,且无法撤销。",
               confirmText: "重置",
               onConfirm: () => {
                 Object.assign(this.plugin.settings, DEFAULTS);
@@ -652,6 +470,295 @@ class FlraSettingTab extends PluginSettingTab {
           })
       );
   }
+
+  /* ===== 各标签页内容 ===== */
+
+  renderBg(el) {
+    this.slider(el, {
+      name: "模糊强度",
+      desc: "弹窗打开时背景的高斯模糊半径。",
+      key: "bgBlurPixels",
+      min: 0,
+      max: 40,
+      step: 1,
+      suffix: "px",
+    });
+
+    this.slider(el, {
+      name: "变暗程度",
+      desc: "0 = 完全不变暗,100 = 全黑。",
+      key: "bgDimOpacity",
+      min: 0,
+      max: 100,
+      step: 1,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.slider(el, {
+      name: "对比度",
+      desc: "100% 为原始对比度。",
+      key: "bgContrast",
+      min: 50,
+      max: 150,
+      step: 1,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.slider(el, {
+      name: "饱和度",
+      desc: "100% 为原始饱和度,略微提高能让模糊后的背景不发灰。",
+      key: "bgSaturation",
+      min: 0,
+      max: 200,
+      step: 1,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.slider(el, {
+      name: "背景缩放",
+      desc:
+        "弹窗打开时背景的缩放目标。大于 100% 是推远(配合由大变小的入场)," +
+        "小于 100% 是收缩(配合由小变大的弹出式入场)。100% 为不缩放。",
+      key: "bgScaleTarget",
+      min: 80,
+      max: 150,
+      step: 0.1,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.slider(el, {
+      name: "背景进入时长",
+      desc: "背景模糊与缩放的进入耗时。",
+      key: "bgInDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(el, {
+      name: "背景退出时长",
+      desc: "背景模糊与缩放的恢复耗时。通常比进入更短会更利落。",
+      key: "bgOutDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.ease(el, { name: "背景进入曲线", key: "bgInEase" });
+    this.ease(el, { name: "背景退出曲线", key: "bgOutEase" });
+  }
+
+  renderModal(el) {
+    this.slider(el, {
+      name: "入场时长",
+      desc: "弹窗出现时的动画耗时。",
+      key: "modalInDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(el, {
+      name: "出场时长",
+      desc: "弹窗消失时的动画耗时。退场副本的存活时间会自动跟随这个值。",
+      key: "modalExitDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(el, {
+      name: "入场起始尺寸",
+      desc: "弹窗从这个尺寸缩到 100%。大于 100% 是「由大变小」,小于则是「弹出」。",
+      key: "modalLargeScale",
+      min: 80,
+      max: 130,
+      step: 0.5,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.slider(el, {
+      name: "出场结束尺寸",
+      desc: "弹窗从 100% 缩放到这个尺寸后消失。",
+      key: "modalExitScale",
+      min: 80,
+      max: 130,
+      step: 0.5,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.ease(el, { name: "入场曲线", key: "modalInEase" });
+    this.ease(el, { name: "出场曲线", key: "modalOutEase" });
+  }
+
+  renderMenu(el) {
+    this.toggle(el, {
+      name: "启用右键菜单动画",
+      desc:
+        "给右键菜单加上入场和退场动画。退场动画是插件独有的 —— " +
+        "菜单关闭时会被直接从 DOM 上摘掉,纯 CSS 没有作用对象,做不到这件事。",
+      key: "menuAnimEnabled",
+    });
+
+    this.slider(el, {
+      name: "淡入时长",
+      desc: "菜单透明度从 0 到 1 的耗时。",
+      key: "menuFadeDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(el, {
+      name: "滑动时长",
+      desc: "菜单滑动到位、同时展开裁剪的耗时。方向自动跟随菜单的展开方向。",
+      key: "menuSlideDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(el, {
+      name: "缩放时长",
+      desc: "菜单缩放到原尺寸的耗时。可以和上面两项设成不同值,做出错落感。",
+      key: "menuScaleDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(el, {
+      name: "滑动距离",
+      desc: "菜单入场时从多远处滑过来。向下展开的从上方滑下来,向上展开的从下方滑上去。",
+      key: "menuSlideDistance",
+      min: 0,
+      max: 80,
+      step: 1,
+      suffix: "px",
+    });
+
+    this.slider(el, {
+      name: "缩放起始尺寸",
+      desc: "菜单从这个尺寸放大到 100%。",
+      key: "menuScaleStart",
+      min: 50,
+      max: 130,
+      step: 0.5,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.ease(el, { name: "入场曲线", key: "menuInEase" });
+
+    this.slider(el, {
+      name: "退场时长",
+      desc: "菜单消失时的动画耗时。",
+      key: "menuExitDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(el, {
+      name: "退场结束尺寸",
+      desc: "菜单从 100% 缩放到这个尺寸后消失。",
+      key: "menuExitScale",
+      min: 50,
+      max: 130,
+      step: 0.5,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.ease(el, { name: "退场曲线", key: "menuOutEase" });
+  }
+
+  renderGlass(el) {
+    this.toggle(el, {
+      name: "启用毛玻璃",
+      desc:
+        "把弹窗、命令面板、右键菜单和编辑器补全浮层换成半透明毛玻璃。" +
+        "注意:这会让每次弹出都多一次背景模糊渲染,机器吃力的话先关掉这个。",
+      key: "glassEnabled",
+    });
+
+    this.toggle(el, {
+      name: "保留原背景色",
+      desc:
+        "开启时按下面的不透明度混入控件原本的背景色(弹窗用主背景色、菜单用次级背景色)。" +
+        "关闭则是完全无色的纯玻璃,只剩模糊和滤镜效果。",
+      key: "glassTintEnabled",
+    });
+
+    this.slider(el, {
+      name: "背景色不透明度",
+      desc: "100% = 完全不透明(看不出玻璃),0% = 完全透明。仅在上一项开启时有效。",
+      key: "glassAlpha",
+      min: 0,
+      max: 100,
+      step: 1,
+      suffix: "%",
+    });
+
+    this.slider(el, {
+      name: "模糊半径",
+      desc: "玻璃背后的高斯模糊半径。和「背景」标签页里那个是各自独立的。",
+      key: "glassBlur",
+      min: 0,
+      max: 60,
+      step: 1,
+      suffix: "px",
+    });
+
+    this.slider(el, {
+      name: "背景亮度",
+      desc: "100% 为原始亮度。调高做出「亮玻璃」,调低做出「暗玻璃」。",
+      key: "glassBrightness",
+      min: 20,
+      max: 200,
+      step: 1,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.slider(el, {
+      name: "背景对比度",
+      desc: "100% 为原始对比度。",
+      key: "glassContrast",
+      min: 20,
+      max: 200,
+      step: 1,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.slider(el, {
+      name: "背景饱和度",
+      desc: "100% 为原始饱和度。适度提高能让玻璃背后的颜色更透亮。",
+      key: "glassSaturation",
+      min: 0,
+      max: 300,
+      step: 1,
+      scale: 100,
+      suffix: "%",
+    });
+  }
+
+  /* ===== 控件辅助方法 ===== */
 
   /**
    * 数值滑块 + 重置按钮。
@@ -682,6 +789,32 @@ class FlraSettingTab extends PluginSettingTab {
           .onClick(() => {
             this.plugin.settings[key] = DEFAULTS[key];
             comp.setValue(toShown(DEFAULTS[key]));
+            this.plugin.applyAndSave(key);
+          })
+      );
+  }
+
+  /** 布尔开关 + 重置按钮 */
+  toggle(containerEl, { name, desc, key }) {
+    let comp;
+
+    new Setting(containerEl)
+      .setName(name)
+      .setDesc(desc)
+      .addToggle((t) => {
+        comp = t;
+        t.setValue(!!this.plugin.settings[key]).onChange((v) => {
+          this.plugin.settings[key] = v;
+          this.plugin.applyAndSave(key);
+        });
+      })
+      .addExtraButton((b) =>
+        b
+          .setIcon("rotate-ccw")
+          .setTooltip(`恢复默认值(${DEFAULTS[key] ? "开启" : "关闭"})`)
+          .onClick(() => {
+            this.plugin.settings[key] = DEFAULTS[key];
+            comp.setValue(DEFAULTS[key]);
             this.plugin.applyAndSave(key);
           })
       );

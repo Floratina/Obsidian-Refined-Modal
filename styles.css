@@ -36,6 +36,13 @@ body {
   --menu-exit-dur:   120ms;         /* 退场时长 */
   --menu-exit-scale: 0.97;          /* 退场结束尺寸 */
   --menu-out-ease: cubic-bezier(.3,0,.8,.5);    /* 菜单退场曲线 */
+
+  /* --- 毛玻璃 (默认关闭,由 body.flra-glass 启用) --- */
+  --flra-glass-alpha:      72%;     /* 混入原背景色的不透明度 */
+  --flra-glass-blur:       12px;    /* 玻璃背后的模糊半径 */
+  --flra-glass-brightness: 1;       /* 背景亮度 */
+  --flra-glass-contrast:   1;       /* 背景对比度 */
+  --flra-glass-saturation: 1.2;     /* 背景饱和度 */
 }
 
 /* ===== 1. 背景层效果 (app-container) ===== */
@@ -232,7 +239,50 @@ body .menu.flra-menu-zombie.flra-menu-up {
   to   { opacity: 0; scale: var(--menu-exit-scale); }
 }
 
-/* ===== 6. 减弱动画模式适配 ===== */
+/* ===== 6. 毛玻璃 ===== */
+/* 总开关:body.flra-glass;是否混入原背景色:body.flra-glass-tint */
+
+/*
+ * 各控件的底色不一样,先各自把底色声明成一个局部变量,下面共用同一套玻璃配方。
+ * 这样加控件只需要多写一行底色,不用把整段滤镜复制一遍。
+ */
+body.flra-glass .modal                { --flra-tint: var(--modal-background, var(--background-primary)); }
+body.flra-glass .prompt               { --flra-tint: var(--background-primary); }
+body.flra-glass .menu                 { --flra-tint: var(--background-secondary); }
+body.flra-glass .suggestion-container { --flra-tint: var(--background-primary); }
+
+/*
+ * 玻璃本体。用 !important 是因为主题(尤其是被 Style Settings 改过的)几乎必然
+ * 也在给这些控件设背景色,不压过去就看不到效果。
+ *
+ * 默认是无色玻璃 —— 背景完全透明,只留滤镜。要底色的话由下面那条规则叠加。
+ */
+body.flra-glass .modal,
+body.flra-glass .prompt,
+body.flra-glass .menu,
+body.flra-glass .suggestion-container {
+  background-color: transparent !important;
+  backdrop-filter:
+    blur(var(--flra-glass-blur))
+    brightness(var(--flra-glass-brightness))
+    contrast(var(--flra-glass-contrast))
+    saturate(var(--flra-glass-saturation));
+  -webkit-backdrop-filter:
+    blur(var(--flra-glass-blur))
+    brightness(var(--flra-glass-brightness))
+    contrast(var(--flra-glass-contrast))
+    saturate(var(--flra-glass-saturation));
+}
+
+/* 开了「保留原背景色」才把底色按指定不透明度混进来 */
+body.flra-glass.flra-glass-tint .modal,
+body.flra-glass.flra-glass-tint .prompt,
+body.flra-glass.flra-glass-tint .menu,
+body.flra-glass.flra-glass-tint .suggestion-container {
+  background-color: color-mix(in srgb, var(--flra-tint) var(--flra-glass-alpha), transparent) !important;
+}
+
+/* ===== 7. 减弱动画模式适配 ===== */
 /* 覆盖上面全部动画章节。
  * 必须带 !important:设置页会把时长以行内样式写到 body 上,
  * 普通声明压不过行内样式,无障碍设置就会失效。 */
@@ -245,7 +295,43 @@ body .menu.flra-menu-zombie.flra-menu-up {
   .app-container { transition: none !important; transform: none !important; filter: none !important; }
 }
 
-/* ===== 7. 设置面板 ===== */
+/* ===== 8. 设置面板 ===== */
+
+/* 标签栏。刻意不做窄屏自动收折成图标那一套 —— 标签只有四个,
+ * 收起来反而要靠猜。让它自然换行就够了。 */
+.flra-tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 2px;
+  margin: 1.5em 0 0;
+  padding: 0 2px;
+  border-bottom: 2px solid var(--background-modifier-border);
+}
+
+.flra-tab {
+  padding: 6px 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--text-muted);
+  border: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+}
+
+.flra-tab:hover {
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
+}
+
+/* 选中态压在分隔线上,做出「这一页连着下面内容」的效果 */
+.flra-tab.is-active {
+  color: var(--text-normal);
+  background-color: var(--background-primary);
+  border-color: var(--background-modifier-border);
+  border-bottom-color: var(--background-primary);
+  transform: translateY(2px);
+}
 
 /* 曲线输入框:等宽字体更好对齐,也需要比默认更宽 */
 .flra-ease-input {
