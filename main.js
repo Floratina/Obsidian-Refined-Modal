@@ -376,6 +376,12 @@ module.exports = class FlraAnimationHelper extends Plugin {
  * 参数已经有 32 项,平铺一屏根本扫不完,所以做成顶部标签页:
  * 「预览」常驻在标签栏上方(调任何一组参数都要用它),「重置全部」常驻在底部,
  * 中间的内容区随标签切换重绘。
+ *
+ * !! 所有自定义成员一律加 flra 前缀,只有 display() 例外(它是 API 约定)。
+ * 起因是这里踩过一次:原先有个方法叫 renderTab(),而 Obsidian 1.13 重做后的
+ * 设置系统里 SettingTab 基类自己就有 renderTab(),被覆盖后 Obsidian 调用它时
+ * 不传参,于是 new Setting(undefined) 抛错,整个设置页白屏。
+ * 继承第三方基类时,任何不加前缀的成员名都是地雷 —— 对方随时可能加同名方法。
  */
 
 const TABS = [
@@ -389,45 +395,45 @@ class FlraSettingTab extends PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
-    this.activeTab = TABS[0][0];
+    this.flraActiveTab = TABS[0][0];
   }
 
   display() {
     const { containerEl } = this;
     containerEl.empty();
 
-    this.renderPreview(containerEl);
+    this.flraRenderPreview(containerEl);
 
     const bar = containerEl.createDiv({ cls: "flra-tab-bar" });
     const body = containerEl.createDiv({ cls: "flra-tab-body" });
 
     for (const [id, label] of TABS) {
       const tab = bar.createDiv({ cls: "flra-tab", text: label });
-      tab.toggleClass("is-active", this.activeTab === id);
+      tab.toggleClass("is-active", this.flraActiveTab === id);
       tab.addEventListener("click", () => {
-        if (this.activeTab === id) return;
-        this.activeTab = id;
+        if (this.flraActiveTab === id) return;
+        this.flraActiveTab = id;
         // 只重画标签状态和内容区,常驻的预览/重置不动
         for (const el of Array.from(bar.children)) el.toggleClass("is-active", el === tab);
         body.empty();
-        this.renderTab(body);
+        this.flraRenderActiveTab(body);
       });
     }
 
-    this.renderTab(body);
-    this.renderResetAll(containerEl);
+    this.flraRenderActiveTab(body);
+    this.flraRenderResetAll(containerEl);
   }
 
-  renderTab(el) {
-    if (this.activeTab === "bg") this.renderBg(el);
-    else if (this.activeTab === "modal") this.renderModal(el);
-    else if (this.activeTab === "menu") this.renderMenu(el);
-    else if (this.activeTab === "glass") this.renderGlass(el);
+  flraRenderActiveTab(el) {
+    if (this.flraActiveTab === "bg") this.flraRenderBg(el);
+    else if (this.flraActiveTab === "modal") this.flraRenderModal(el);
+    else if (this.flraActiveTab === "menu") this.flraRenderMenu(el);
+    else if (this.flraActiveTab === "glass") this.flraRenderGlass(el);
   }
 
   /* ===== 常驻区 ===== */
 
-  renderPreview(el) {
+  flraRenderPreview(el) {
     const preview = new Setting(el)
       .setName("预览动画")
       .setDesc("打开一个测试弹窗,直接看当前参数的进出场效果。")
@@ -447,7 +453,7 @@ class FlraSettingTab extends PluginSettingTab {
     }
   }
 
-  renderResetAll(el) {
+  flraRenderResetAll(el) {
     // 破坏性操作,放在最底部而不是顶部,不该出现在容易误点的位置
     new Setting(el)
       .setName("重置全部参数")
@@ -473,8 +479,8 @@ class FlraSettingTab extends PluginSettingTab {
 
   /* ===== 各标签页内容 ===== */
 
-  renderBg(el) {
-    this.slider(el, {
+  flraRenderBg(el) {
+    this.flraSlider(el, {
       name: "模糊强度",
       desc: "弹窗打开时背景的高斯模糊半径。",
       key: "bgBlurPixels",
@@ -484,7 +490,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "px",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "变暗程度",
       desc: "0 = 完全不变暗,100 = 全黑。",
       key: "bgDimOpacity",
@@ -495,7 +501,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "对比度",
       desc: "100% 为原始对比度。",
       key: "bgContrast",
@@ -506,7 +512,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "饱和度",
       desc: "100% 为原始饱和度,略微提高能让模糊后的背景不发灰。",
       key: "bgSaturation",
@@ -517,7 +523,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "背景缩放",
       desc:
         "弹窗打开时背景的缩放目标。大于 100% 是推远(配合由大变小的入场)," +
@@ -530,7 +536,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "背景进入时长",
       desc: "背景模糊与缩放的进入耗时。",
       key: "bgInDur",
@@ -540,7 +546,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "ms",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "背景退出时长",
       desc: "背景模糊与缩放的恢复耗时。通常比进入更短会更利落。",
       key: "bgOutDur",
@@ -550,12 +556,12 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "ms",
     });
 
-    this.ease(el, { name: "背景进入曲线", key: "bgInEase" });
-    this.ease(el, { name: "背景退出曲线", key: "bgOutEase" });
+    this.flraEase(el, { name: "背景进入曲线", key: "bgInEase" });
+    this.flraEase(el, { name: "背景退出曲线", key: "bgOutEase" });
   }
 
-  renderModal(el) {
-    this.slider(el, {
+  flraRenderModal(el) {
+    this.flraSlider(el, {
       name: "入场时长",
       desc: "弹窗出现时的动画耗时。",
       key: "modalInDur",
@@ -565,7 +571,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "ms",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "出场时长",
       desc: "弹窗消失时的动画耗时。退场副本的存活时间会自动跟随这个值。",
       key: "modalExitDur",
@@ -575,7 +581,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "ms",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "入场起始尺寸",
       desc: "弹窗从这个尺寸缩到 100%。大于 100% 是「由大变小」,小于则是「弹出」。",
       key: "modalLargeScale",
@@ -586,7 +592,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "出场结束尺寸",
       desc: "弹窗从 100% 缩放到这个尺寸后消失。",
       key: "modalExitScale",
@@ -597,12 +603,12 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.ease(el, { name: "入场曲线", key: "modalInEase" });
-    this.ease(el, { name: "出场曲线", key: "modalOutEase" });
+    this.flraEase(el, { name: "入场曲线", key: "modalInEase" });
+    this.flraEase(el, { name: "出场曲线", key: "modalOutEase" });
   }
 
-  renderMenu(el) {
-    this.toggle(el, {
+  flraRenderMenu(el) {
+    this.flraToggle(el, {
       name: "启用右键菜单动画",
       desc:
         "给右键菜单加上入场和退场动画。退场动画是插件独有的 —— " +
@@ -610,7 +616,7 @@ class FlraSettingTab extends PluginSettingTab {
       key: "menuAnimEnabled",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "淡入时长",
       desc: "菜单透明度从 0 到 1 的耗时。",
       key: "menuFadeDur",
@@ -620,7 +626,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "ms",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "滑动时长",
       desc: "菜单滑动到位、同时展开裁剪的耗时。方向自动跟随菜单的展开方向。",
       key: "menuSlideDur",
@@ -630,7 +636,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "ms",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "缩放时长",
       desc: "菜单缩放到原尺寸的耗时。可以和上面两项设成不同值,做出错落感。",
       key: "menuScaleDur",
@@ -640,7 +646,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "ms",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "滑动距离",
       desc: "菜单入场时从多远处滑过来。向下展开的从上方滑下来,向上展开的从下方滑上去。",
       key: "menuSlideDistance",
@@ -650,7 +656,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "px",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "缩放起始尺寸",
       desc: "菜单从这个尺寸放大到 100%。",
       key: "menuScaleStart",
@@ -661,9 +667,9 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.ease(el, { name: "入场曲线", key: "menuInEase" });
+    this.flraEase(el, { name: "入场曲线", key: "menuInEase" });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "退场时长",
       desc: "菜单消失时的动画耗时。",
       key: "menuExitDur",
@@ -673,7 +679,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "ms",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "退场结束尺寸",
       desc: "菜单从 100% 缩放到这个尺寸后消失。",
       key: "menuExitScale",
@@ -684,11 +690,11 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.ease(el, { name: "退场曲线", key: "menuOutEase" });
+    this.flraEase(el, { name: "退场曲线", key: "menuOutEase" });
   }
 
-  renderGlass(el) {
-    this.toggle(el, {
+  flraRenderGlass(el) {
+    this.flraToggle(el, {
       name: "启用毛玻璃",
       desc:
         "把弹窗、命令面板、右键菜单和编辑器补全浮层换成半透明毛玻璃。" +
@@ -696,7 +702,7 @@ class FlraSettingTab extends PluginSettingTab {
       key: "glassEnabled",
     });
 
-    this.toggle(el, {
+    this.flraToggle(el, {
       name: "保留原背景色",
       desc:
         "开启时按下面的不透明度混入控件原本的背景色(弹窗用主背景色、菜单用次级背景色)。" +
@@ -704,7 +710,7 @@ class FlraSettingTab extends PluginSettingTab {
       key: "glassTintEnabled",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "背景色不透明度",
       desc: "100% = 完全不透明(看不出玻璃),0% = 完全透明。仅在上一项开启时有效。",
       key: "glassAlpha",
@@ -714,7 +720,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "模糊半径",
       desc: "玻璃背后的高斯模糊半径。和「背景」标签页里那个是各自独立的。",
       key: "glassBlur",
@@ -724,7 +730,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "px",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "背景亮度",
       desc: "100% 为原始亮度。调高做出「亮玻璃」,调低做出「暗玻璃」。",
       key: "glassBrightness",
@@ -735,7 +741,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "背景对比度",
       desc: "100% 为原始对比度。",
       key: "glassContrast",
@@ -746,7 +752,7 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.slider(el, {
+    this.flraSlider(el, {
       name: "背景饱和度",
       desc: "100% 为原始饱和度。适度提高能让玻璃背后的颜色更透亮。",
       key: "glassSaturation",
@@ -764,7 +770,7 @@ class FlraSettingTab extends PluginSettingTab {
    * 数值滑块 + 重置按钮。
    * scale 用于「界面按百分比显示、内部按倍数存储」:界面值 = 存储值 * scale。
    */
-  slider(containerEl, { name, desc, key, min, max, step, scale = 1, suffix = "" }) {
+  flraSlider(containerEl, { name, desc, key, min, max, step, scale = 1, suffix = "" }) {
     // 浮点误差:1.005 * 100 === 100.49999999999999,不修一下滑块会落在错的档位
     const toShown = (stored) => Math.round(stored * scale * 1000) / 1000;
     let comp;
@@ -795,7 +801,7 @@ class FlraSettingTab extends PluginSettingTab {
   }
 
   /** 布尔开关 + 重置按钮 */
-  toggle(containerEl, { name, desc, key }) {
+  flraToggle(containerEl, { name, desc, key }) {
     let comp;
 
     new Setting(containerEl)
@@ -826,7 +832,7 @@ class FlraSettingTab extends PluginSettingTab {
    * 选中具名预设时文本框锁定(只读展示),选「自定义」才解锁手写。
    * 这样就不会出现"下拉显示某预设、文本框却是别的值"的错位状态。
    */
-  ease(containerEl, { name, key }) {
+  flraEase(containerEl, { name, key }) {
     let dropdown;
     let text;
     // 程序性地同步控件时要屏蔽 onChange,否则会误触"切到自定义"的分支

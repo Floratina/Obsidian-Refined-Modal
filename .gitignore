@@ -1,6 +1,9 @@
 # Claude Code 的本地会话配置,不入库
 .claude/
 
+# 调试用的桩件,不是插件的一部分
+_probe.js
+
 # 手动备份已由 git 接管
 *.bak
 
