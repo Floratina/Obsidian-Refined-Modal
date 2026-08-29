@@ -102,51 +102,10 @@ module.exports = class FlraAnimationHelper extends Plugin {
     this.applyVars();
     this.register(() => this.clearVars());
 
-    this.warmUpCompositor();
     this.setupBackgroundObserver();
     this.patchModalClose();
 
     this.addSettingTab(new FlraSettingTab(this.app, this));
-  }
-
-  /*
-   * 启动预热。
-   *
-   * 第一次执行 backdrop-filter: blur() 时,Chromium 要编译模糊 shader、链接
-   * GPU program,并首次把 .app-container 栅格化成合成层纹理 —— 这一下会掉帧。
-   * 之后 shader 已缓存、纹理已在显存,所以只有开 Obsidian 后的第一个弹窗卡。
-   *
-   * 这里趁启动阶段(本来就在加载,掉一帧看不出来)先渲染一次,把这笔一次性
-   * 开销提前付掉。关键点是 opacity 必须 > 0:Chromium 对 opacity:0 的元素
-   * 可能整个跳过绘制,那样 shader 根本不会被编译,预热就白做了。
-   */
-  warmUpCompositor() {
-    let raf = 0;
-    let cancelled = false;
-
-    this.register(() => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-      document.body.removeClass("flra-warmup");
-    });
-
-    this.app.workspace.onLayoutReady(() => {
-      if (cancelled) return;
-      document.body.addClass("flra-warmup");
-
-      // 用 rAF 计帧而不是 setTimeout:要的是"确实被绘制过若干帧",
-      // 定时器在窗口未绘制时照样会走完。
-      let frames = 10;
-      const step = () => {
-        if (cancelled) return;
-        if (--frames > 0) {
-          raf = requestAnimationFrame(step);
-          return;
-        }
-        document.body.removeClass("flra-warmup");
-      };
-      raf = requestAnimationFrame(step);
-    });
   }
 
   /* ===== 设置 <-> CSS 变量 ===== */

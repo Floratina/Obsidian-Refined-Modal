@@ -62,32 +62,13 @@ body::after {
   opacity: 0;
   pointer-events: none;
   backface-visibility: hidden;
-  /* will-change 必须提前挂着才有意义:它的作用是让浏览器预先把合成层建好。
-   * 以前它只写在 .modal-open 状态里,于是浏览器在同一次样式变更中同时收到
-   * 「要准备」和「已经变了」,零提前量,等于白写。这是个空伪元素,常驻代价很小。 */
-  will-change: opacity;
   transition: opacity var(--bg-out-dur) var(--bg-out-ease);
 }
 
 body.modal-open::after {
+  will-change: opacity;
   opacity: 1;
   transition: opacity var(--bg-in-dur) var(--bg-in-ease);
-}
-
-/* 1c. 启动预热 (配合 main.js 的 warmUpCompositor) */
-
-/* opacity 必须 > 0:Chromium 对 opacity:0 的元素可能整个跳过绘制,
- * 那样模糊 shader 就不会被编译,预热也就没意义了。
- * 0.001 肉眼不可见,但足以触发一次真实的 backdrop-filter 渲染。
- * :not(.modal-open) 是为了防止启动瞬间正好有弹窗开着时,预热把遮罩压没。 */
-body.flra-warmup:not(.modal-open)::after {
-  opacity: 0.001;
-  transition: none !important;   /* 预热是即时的,不该走过渡 */
-}
-
-/* 顺带让主容器的合成层也先建一次 */
-body.flra-warmup .app-container {
-  will-change: transform;
 }
 
 /* ===== 2. 弹窗层级矫正 ===== */
