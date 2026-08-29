@@ -172,9 +172,9 @@ body .modal-zombie .modal-content {
 body.flra-menu-anim > .menu:not(.flra-menu-zombie) {
   transform-origin: top center !important;
   animation:
-    flra-menu-fade  var(--menu-fade-dur)  var(--menu-in-ease) both,
-    flra-menu-slide var(--menu-slide-dur) var(--menu-in-ease) both,
-    flra-menu-scale var(--menu-scale-dur) var(--menu-in-ease) both !important;
+    flra-menu-fade       var(--menu-fade-dur)  var(--menu-in-ease) both,
+    flra-menu-slide-down var(--menu-slide-dur) var(--menu-in-ease) both,
+    flra-menu-scale      var(--menu-scale-dur) var(--menu-in-ease) both !important;
 }
 
 @keyframes flra-menu-fade {
@@ -182,10 +182,12 @@ body.flra-menu-anim > .menu:not(.flra-menu-zombie) {
   to   { opacity: 1; }
 }
 
-@keyframes flra-menu-slide {
-  from { translate: 0 var(--menu-slide-distance); clip-path: inset(0 0 100% 0); }
+/* 向下展开的菜单:内容从上方滑下来,裁剪同步自上而下展开,
+ * 视觉上就是从顶边「淌」出来。 */
+@keyframes flra-menu-slide-down {
+  from { translate: 0 calc(-1 * var(--menu-slide-distance)); clip-path: inset(0 0 100% 0); }
   /* 收尾用负值外扩,免得把菜单自己的阴影裁掉 */
-  to   { translate: 0 0;                          clip-path: inset(-30px); }
+  to   { translate: 0 0;                                     clip-path: inset(-30px); }
 }
 
 @keyframes flra-menu-scale {
@@ -206,9 +208,10 @@ body.flra-menu-anim > .menu.flra-menu-up:not(.flra-menu-zombie) {
     flra-menu-scale    var(--menu-scale-dur) var(--menu-in-ease) both !important;
 }
 
+/* 向上展开的菜单:内容从下方滑上去,裁剪自下而上展开 */
 @keyframes flra-menu-slide-up {
-  from { translate: 0 calc(-1 * var(--menu-slide-distance)); clip-path: inset(100% 0 0 0); }
-  to   { translate: 0 0;                                     clip-path: inset(-30px); }
+  from { translate: 0 var(--menu-slide-distance); clip-path: inset(100% 0 0 0); }
+  to   { translate: 0 0;                          clip-path: inset(-30px); }
 }
 
 /* 退场副本。菜单关闭时会被直接从 DOM 摘掉,纯 CSS 没有作用对象 ——

@@ -18,7 +18,7 @@
   "menuFadeDur": 155,
   "menuSlideDur": 120,
   "menuScaleDur": 115,
-  "menuSlideDistance": 7,
+  "menuSlideDistance": 79,
   "menuScaleStart": 0.985,
   "menuInEase": "cubic-bezier(0,.7,.36,1)",
   "menuExitDur": 30,
