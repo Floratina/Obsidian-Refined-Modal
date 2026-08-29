@@ -13,5 +13,15 @@
   "modalInEase": "cubic-bezier(.04,.5,.23,1)",
   "modalOutEase": "cubic-bezier(.05,.7,.01,1)",
   "bgInEase": "cubic-bezier(0.18,0.89,0.32,1)",
-  "bgOutEase": "cubic-bezier(0.25,0.1,0.25,1)"
+  "bgOutEase": "cubic-bezier(0.25,0.1,0.25,1)",
+  "menuAnimEnabled": true,
+  "menuFadeDur": 155,
+  "menuSlideDur": 120,
+  "menuScaleDur": 115,
+  "menuSlideDistance": 7,
+  "menuScaleStart": 0.985,
+  "menuInEase": "cubic-bezier(0,.7,.36,1)",
+  "menuExitDur": 30,
+  "menuExitScale": 0.985,
+  "menuOutEase": "cubic-bezier(.3,0,.8,.5)"
 }

@@ -193,12 +193,35 @@ body.flra-menu-anim > .menu:not(.flra-menu-zombie) {
   to   { scale: 1; }
 }
 
+/* 向上展开时整个镜像。
+ *
+ * 是否向上由 main.js 的 markMenuDirection() 判断后打上 flra-menu-up ——
+ * Obsidian 没有暴露翻转状态,只能拿菜单的 top 和最近的指针位置比。
+ * 缩放的支点也要跟着从 top 换到 bottom,否则会从错误的一端展开。 */
+body.flra-menu-anim > .menu.flra-menu-up:not(.flra-menu-zombie) {
+  transform-origin: bottom center !important;
+  animation:
+    flra-menu-fade     var(--menu-fade-dur)  var(--menu-in-ease) both,
+    flra-menu-slide-up var(--menu-slide-dur) var(--menu-in-ease) both,
+    flra-menu-scale    var(--menu-scale-dur) var(--menu-in-ease) both !important;
+}
+
+@keyframes flra-menu-slide-up {
+  from { translate: 0 calc(-1 * var(--menu-slide-distance)); clip-path: inset(100% 0 0 0); }
+  to   { translate: 0 0;                                     clip-path: inset(-30px); }
+}
+
 /* 退场副本。菜单关闭时会被直接从 DOM 摘掉,纯 CSS 没有作用对象 ——
  * 这份副本由 main.js 的 spawnMenuZombie() 克隆并贴回 body。 */
 body .menu.flra-menu-zombie {
   pointer-events: none;             /* 副本不可点 */
   transform-origin: top center !important;
   animation: flra-menu-out var(--menu-exit-dur) var(--menu-out-ease) forwards !important;
+}
+
+/* 方向类是克隆时一并带过来的,所以副本会自动收缩向正确的一端 */
+body .menu.flra-menu-zombie.flra-menu-up {
+  transform-origin: bottom center !important;
 }
 
 @keyframes flra-menu-out {

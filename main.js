@@ -127,6 +127,7 @@ module.exports = class FlraAnimationHelper extends Plugin {
     this.applyVars();
     this.register(() => this.clearVars());
 
+    this.setupPointerTracking();
     this.setupBodyObserver();
     this.patchModalClose();
 
@@ -168,7 +169,41 @@ module.exports = class FlraAnimationHelper extends Plugin {
     this.saveDebounced();
   }
 
-  /* ===== body 观察者:背景状态 + 菜单移除 ===== */
+  /* ===== body 观察者:背景状态 + 菜单出现/移除 ===== */
+
+  /*
+   * 记录最近的指针位置,用来判断菜单是向上还是向下展开。
+   * 只存两个数,回调开销可以忽略;capture 阶段保证别人 stopPropagation 也拦不住。
+   * pointermove 是必要的 —— 二级子菜单由悬停触发,没有 pointerdown 可用。
+   */
+  setupPointerTracking() {
+    this.lastPointer = null;
+    const track = (e) => {
+      this.lastPointer = { y: e.clientY, t: performance.now() };
+    };
+    const opts = { capture: true, passive: true };
+    this.registerDomEvent(document, "pointermove", track, opts);
+    this.registerDomEvent(document, "pointerdown", track, opts);
+  }
+
+  /*
+   * 判断菜单的展开方向,向上展开的打上 flra-menu-up,让 CSS 把滑动整个镜像。
+   *
+   * Obsidian 没有提供翻转标记(MenuPositionDef 只有横向的 left),只能自己算。
+   * 这里刻意读行内 style.top 而不是 getBoundingClientRect() —— 后者会强制同步
+   * 布局,在这个 vault 里(627KB 主题 + 50 个 snippet)一次全文档重算要几十毫秒。
+   * style.top 是 Obsidian 自己刚写进去的字符串,读它不触发任何布局。
+   *
+   * 前提:菜单是 fixed 定位,top 即视口坐标。读不出来就按默认的向下展开处理。
+   */
+  markMenuDirection(menuEl) {
+    const top = parseFloat(menuEl.style.top);
+    const p = this.lastPointer;
+    // 指针位置太旧(键盘唤起、showAtPosition 等)就不猜,按向下处理
+    const fresh = p && performance.now() - p.t < 2000;
+    const openedUp = fresh && isFinite(top) && top < p.y - 4;
+    menuEl.classList.toggle("flra-menu-up", !!openedUp);
+  }
 
   setupBodyObserver() {
     const update = (records) => {
@@ -178,9 +213,19 @@ module.exports = class FlraAnimationHelper extends Plugin {
 
       if (!records || !this.settings.menuAnimEnabled) return;
 
-      // 右键菜单关闭时是被直接 detach 的,CSS 再没有作用对象 ——
-      // 在这里接住被摘掉的节点,克隆一份贴回去承载退场动画。
       for (const rec of records) {
+        // 菜单刚出现:标记展开方向。这里跑在微任务里,早于首帧绘制,
+        // 所以类能赶在入场动画开始之前挂上。
+        for (const node of rec.addedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          if (!node.classList.contains("menu")) continue;
+          // 副本的方向是克隆时带过来的,不能按当前指针重新算
+          if (node.classList.contains("flra-menu-zombie")) continue;
+          this.markMenuDirection(node);
+        }
+
+        // 菜单关闭时是被直接 detach 的,CSS 再没有作用对象 ——
+        // 在这里接住被摘掉的节点,克隆一份贴回去承载退场动画。
         for (const node of rec.removedNodes) {
           if (!(node instanceof HTMLElement)) continue;
           if (!node.classList.contains("menu")) continue;
@@ -195,9 +240,9 @@ module.exports = class FlraAnimationHelper extends Plugin {
       }
     };
 
-    // Obsidian 把 .modal-container 和 .menu 都直接挂在 body 下,不需要 subtree。
-    // 代价:setParentElement() 改过父元素的菜单、二级子菜单、以及 popout 窗口里的,
-    // 都不在观察范围内,不会有退场动画。
+    // Obsidian 把 .modal-container 和 .menu(含二级子菜单)都直接挂在 body 下,
+    // 不需要 subtree。代价:setParentElement() 改过父元素的菜单、以及 popout
+    // 窗口里的,不在观察范围内,不会有动画。
     const observer = new MutationObserver(update);
     observer.observe(document.body, { childList: true, subtree: false });
 
@@ -519,8 +564,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.slider(containerEl, {
-      name: "下滑时长",
-      desc: "菜单从下方位移到位、同时展开裁剪的耗时。",
+      name: "滑动时长",
+      desc: "菜单滑动到位、同时展开裁剪的耗时。方向自动跟随菜单的展开方向。",
       key: "menuSlideDur",
       min: 0,
       max: 800,
@@ -539,8 +584,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.slider(containerEl, {
-      name: "下滑距离",
-      desc: "菜单入场时从下方多远处滑上来。",
+      name: "滑动距离",
+      desc: "菜单入场时从多远处滑过来。向下展开的菜单从下方滑上来,向上展开的从上方滑下去。",
       key: "menuSlideDistance",
       min: 0,
       max: 80,
