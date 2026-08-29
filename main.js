@@ -32,6 +32,18 @@ const DEFAULTS = {
   modalOutEase: "cubic-bezier(.07,.86,.32,1)",
   bgInEase: "cubic-bezier(0.18,0.89,0.32,1)",
   bgOutEase: "cubic-bezier(0.18,0.89,0.32,1)",
+
+  // 右键菜单(入场取值对齐原 snippet,退场是插件独有的新东西)
+  menuAnimEnabled: false,
+  menuFadeDur: 250,
+  menuSlideDur: 160,
+  menuScaleDur: 160,
+  menuSlideDistance: 14,
+  menuScaleStart: 0.96,
+  menuInEase: "cubic-bezier(0,.7,.36,1)",
+  menuExitDur: 120,
+  menuExitScale: 0.97,
+  menuOutEase: "cubic-bezier(.3,0,.8,.5)",
 };
 
 /* 设置键 -> [CSS 变量名, 单位] */
@@ -51,6 +63,17 @@ const VAR_MAP = {
   modalOutEase: ["--modal-out-ease", ""],
   bgInEase: ["--bg-in-ease", ""],
   bgOutEase: ["--bg-out-ease", ""],
+  menuFadeDur: ["--menu-fade-dur", "ms"],
+  menuSlideDur: ["--menu-slide-dur", "ms"],
+  menuScaleDur: ["--menu-scale-dur", "ms"],
+  menuSlideDistance: ["--menu-slide-distance", "px"],
+  menuScaleStart: ["--menu-scale-start", ""],
+  menuInEase: ["--menu-in-ease", ""],
+  menuExitDur: ["--menu-exit-dur", "ms"],
+  menuExitScale: ["--menu-exit-scale", ""],
+  menuOutEase: ["--menu-out-ease", ""],
+  // 注意:menuAnimEnabled 是布尔总开关,不是 CSS 变量,故意不在这张表里。
+  // 它由 applyMenuClass() 切换 body 上的类来生效。
 };
 
 /*
@@ -64,6 +87,8 @@ const EASE_PRESETS = {
   "柔和减速 ★背景默认": "cubic-bezier(0.18,0.89,0.32,1)",
   "急停 ★入场默认": "cubic-bezier(.04,.5,.23,1)",
   "长尾收束 ★出场默认": "cubic-bezier(.07,.86,.32,1)",
+  "菜单入场 ★默认": "cubic-bezier(0,.7,.36,1)",
+  "菜单退场 ★默认": "cubic-bezier(.3,0,.8,.5)",
   轻微回弹: "cubic-bezier(0.34,1.56,0.64,1)",
 };
 const EASE_PRESET_VALUES = new Set(Object.values(EASE_PRESETS));
@@ -102,7 +127,7 @@ module.exports = class FlraAnimationHelper extends Plugin {
     this.applyVars();
     this.register(() => this.clearVars());
 
-    this.setupBackgroundObserver();
+    this.setupBodyObserver();
     this.patchModalClose();
 
     this.addSettingTab(new FlraSettingTab(this.app, this));
@@ -111,37 +136,68 @@ module.exports = class FlraAnimationHelper extends Plugin {
   /* ===== 设置 <-> CSS 变量 ===== */
 
   applyVar(key) {
-    const [name, unit] = VAR_MAP[key];
+    const entry = VAR_MAP[key];
+    // menuAnimEnabled 这类布尔开关不是 CSS 变量,不在表里,直接跳过
+    if (!entry) return;
+    const [name, unit] = entry;
     document.body.style.setProperty(name, `${this.settings[key]}${unit}`);
   }
 
   applyVars() {
     for (const key of Object.keys(VAR_MAP)) this.applyVar(key);
+    this.applyMenuClass();
+  }
+
+  /** 菜单动画总开关:CSS 那边靠 body.flra-menu-anim 生效 */
+  applyMenuClass() {
+    document.body.classList.toggle("flra-menu-anim", !!this.settings.menuAnimEnabled);
   }
 
   clearVars() {
     for (const key of Object.keys(VAR_MAP)) {
       document.body.style.removeProperty(VAR_MAP[key][0]);
     }
+    document.body.classList.remove("flra-menu-anim");
   }
 
   /** 立即生效 + 延迟落盘。传 key 只更新那一个变量(拖滑块时每帧都会调) */
   applyAndSave(key) {
-    if (key) this.applyVar(key);
+    if (key === "menuAnimEnabled") this.applyMenuClass();
+    else if (key) this.applyVar(key);
     else this.applyVars();
     this.saveDebounced();
   }
 
-  /* ===== 背景状态:body.modal-open ===== */
+  /* ===== body 观察者:背景状态 + 菜单移除 ===== */
 
-  setupBackgroundObserver() {
-    const update = () => {
+  setupBodyObserver() {
+    const update = (records) => {
       // 僵尸副本不算真窗口,不能让它把背景吊着
       const hasReal = document.querySelector(".modal-container:not(.modal-zombie)") !== null;
       document.body.classList.toggle("modal-open", hasReal);
+
+      if (!records || !this.settings.menuAnimEnabled) return;
+
+      // 右键菜单关闭时是被直接 detach 的,CSS 再没有作用对象 ——
+      // 在这里接住被摘掉的节点,克隆一份贴回去承载退场动画。
+      for (const rec of records) {
+        for (const node of rec.removedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          if (!node.classList.contains("menu")) continue;
+          // 副本自己被移除时同样会走到这里,不挡掉就会无限自我复制
+          if (node.classList.contains("flra-menu-zombie")) continue;
+          try {
+            this.spawnMenuZombie(node);
+          } catch (e) {
+            console.error("[FLRA Animation Helper] 生成菜单退场副本失败", e);
+          }
+        }
+      }
     };
 
-    // Obsidian 把 .modal-container 直接挂在 body 下,不需要 subtree
+    // Obsidian 把 .modal-container 和 .menu 都直接挂在 body 下,不需要 subtree。
+    // 代价:setParentElement() 改过父元素的菜单、二级子菜单、以及 popout 窗口里的,
+    // 都不在观察范围内,不会有退场动画。
     const observer = new MutationObserver(update);
     observer.observe(document.body, { childList: true, subtree: false });
 
@@ -204,12 +260,28 @@ module.exports = class FlraAnimationHelper extends Plugin {
       document.body.classList.remove("modal-open");
     }
 
-    // 存活时间跟随 --modal-exit-dur。走计算样式而不是直接读 settings,
-    // 这样用户额外写 CSS snippet 覆盖变量时也能自动跟上。
-    const dur = parseDur(
-      getComputedStyle(document.body).getPropertyValue("--modal-exit-dur"),
-      this.settings.modalExitDur
-    );
+    this.reap(zombie, "--modal-exit-dur", this.settings.modalExitDur);
+  }
+
+  /** 克隆一份菜单副本来承载退场动画 */
+  spawnMenuZombie(menuEl) {
+    const zombie = menuEl.cloneNode(true);
+    zombie.removeAttribute("id");
+    // 和弹窗副本相反:这里绝不能清掉行内 style ——
+    // 菜单的 top/left 定位就写在里面,清了副本会跑到屏幕左上角
+    zombie.classList.add("flra-menu-zombie");
+    document.body.appendChild(zombie);
+
+    this.reap(zombie, "--menu-exit-dur", this.settings.menuExitDur);
+  }
+
+  /**
+   * 让副本跑完退场动画后自我销毁。弹窗和菜单共用。
+   * durVar 是决定时长的 CSS 变量名 —— 走计算样式而不是直接读 settings,
+   * 这样用户额外写 CSS snippet 覆盖变量时也能自动跟上。
+   */
+  reap(zombie, durVar, fallbackMs) {
+    const dur = parseDur(getComputedStyle(document.body).getPropertyValue(durVar), fallbackMs);
 
     let done = false;
     let timer = 0;
@@ -222,7 +294,7 @@ module.exports = class FlraAnimationHelper extends Plugin {
     };
 
     zombie.addEventListener("animationend", (e) => {
-      // animationend 会冒泡,内部 .modal-bg 也在跑动画,只认容器自己的
+      // animationend 会冒泡,内部元素也可能在跑动画,只认容器自己的
       if (e.target === zombie) kill();
     });
 
@@ -407,6 +479,110 @@ class FlraSettingTab extends PluginSettingTab {
       name: "背景退出曲线",
       key: "bgOutEase",
     });
+
+    /* --- 右键菜单 --- */
+    new Setting(containerEl).setName("右键菜单").setHeading();
+
+    let menuToggle;
+    new Setting(containerEl)
+      .setName("启用右键菜单动画")
+      .setDesc(
+        "给右键菜单加上入场和退场动画。退场动画是插件独有的 —— " +
+          "菜单关闭时会被直接从 DOM 上摘掉,纯 CSS 没有作用对象,做不到这件事。"
+      )
+      .addToggle((t) => {
+        menuToggle = t;
+        t.setValue(this.plugin.settings.menuAnimEnabled).onChange((v) => {
+          this.plugin.settings.menuAnimEnabled = v;
+          this.plugin.applyAndSave("menuAnimEnabled");
+        });
+      })
+      .addExtraButton((b) =>
+        b
+          .setIcon("rotate-ccw")
+          .setTooltip("恢复默认值(关闭)")
+          .onClick(() => {
+            this.plugin.settings.menuAnimEnabled = DEFAULTS.menuAnimEnabled;
+            menuToggle.setValue(DEFAULTS.menuAnimEnabled);
+            this.plugin.applyAndSave("menuAnimEnabled");
+          })
+      );
+
+    this.slider(containerEl, {
+      name: "淡入时长",
+      desc: "菜单透明度从 0 到 1 的耗时。",
+      key: "menuFadeDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(containerEl, {
+      name: "下滑时长",
+      desc: "菜单从下方位移到位、同时展开裁剪的耗时。",
+      key: "menuSlideDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(containerEl, {
+      name: "缩放时长",
+      desc: "菜单缩放到原尺寸的耗时。可以和上面两项设成不同值,做出错落感。",
+      key: "menuScaleDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(containerEl, {
+      name: "下滑距离",
+      desc: "菜单入场时从下方多远处滑上来。",
+      key: "menuSlideDistance",
+      min: 0,
+      max: 80,
+      step: 1,
+      suffix: "px",
+    });
+
+    this.slider(containerEl, {
+      name: "缩放起始尺寸",
+      desc: "菜单从这个尺寸放大到 100%。",
+      key: "menuScaleStart",
+      min: 50,
+      max: 130,
+      step: 0.5,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.ease(containerEl, { name: "菜单入场曲线", key: "menuInEase" });
+
+    this.slider(containerEl, {
+      name: "退场时长",
+      desc: "菜单消失时的动画耗时。",
+      key: "menuExitDur",
+      min: 0,
+      max: 800,
+      step: 5,
+      suffix: "ms",
+    });
+
+    this.slider(containerEl, {
+      name: "退场结束尺寸",
+      desc: "菜单从 100% 缩放到这个尺寸后消失。",
+      key: "menuExitScale",
+      min: 50,
+      max: 130,
+      step: 0.5,
+      scale: 100,
+      suffix: "%",
+    });
+
+    this.ease(containerEl, { name: "菜单退场曲线", key: "menuOutEase" });
 
     /* --- 全局重置 --- */
     // 放在最底部而不是顶部:这是破坏性操作,不该出现在容易误点的位置

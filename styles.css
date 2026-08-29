@@ -25,6 +25,17 @@ body {
   /* --- 缩放幅度 --- */
   --modal-large-scale: 1.05;        /* 入场时的起始尺寸 */
   --modal-exit-scale:  1.02;        /* 出场时的结束尺寸 */
+
+  /* --- 右键菜单 (入场取值来自原 snippet,退场是插件新增的) --- */
+  --menu-fade-dur:       250ms;     /* 淡入时长 */
+  --menu-slide-dur:      160ms;     /* 下滑时长 */
+  --menu-scale-dur:      160ms;     /* 缩放时长 */
+  --menu-slide-distance: 14px;      /* 下滑起始偏移 */
+  --menu-scale-start:    0.96;      /* 缩放起始比例 */
+  --menu-in-ease:  cubic-bezier(0,.7,.36,1);    /* 菜单入场曲线 */
+  --menu-exit-dur:   120ms;         /* 退场时长 */
+  --menu-exit-scale: 0.97;          /* 退场结束尺寸 */
+  --menu-out-ease: cubic-bezier(.3,0,.8,.5);    /* 菜单退场曲线 */
 }
 
 /* ===== 1. 背景层效果 (app-container) ===== */
@@ -147,15 +158,68 @@ body .modal-zombie .modal-content {
   to   { opacity: 0; }
 }
 
-/* 减弱动画模式适配
+/* ===== 5. 右键菜单动画 ===== */
+/* 总开关:设置里打开时,插件给 body 挂上 .flra-menu-anim */
+
+/* 入场。
+ *
+ * 原 snippet 把「下滑」和「缩放」写成两条动画,但两条都在动 transform ——
+ * CSS 里同一属性由后声明的动画覆盖,所以 translateY 从头到尾就没生效过,
+ * 看到的切入感全部来自 clip-path。
+ *
+ * 这里改用独立变换属性 translate 和 scale:它们是两个不同的 CSS 属性,
+ * 可以各跑各的动画互不覆盖,三段独立时长才真正成立。 */
+body.flra-menu-anim > .menu:not(.flra-menu-zombie) {
+  transform-origin: top center !important;
+  animation:
+    flra-menu-fade  var(--menu-fade-dur)  var(--menu-in-ease) both,
+    flra-menu-slide var(--menu-slide-dur) var(--menu-in-ease) both,
+    flra-menu-scale var(--menu-scale-dur) var(--menu-in-ease) both !important;
+}
+
+@keyframes flra-menu-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes flra-menu-slide {
+  from { translate: 0 var(--menu-slide-distance); clip-path: inset(0 0 100% 0); }
+  /* 收尾用负值外扩,免得把菜单自己的阴影裁掉 */
+  to   { translate: 0 0;                          clip-path: inset(-30px); }
+}
+
+@keyframes flra-menu-scale {
+  from { scale: var(--menu-scale-start); }
+  to   { scale: 1; }
+}
+
+/* 退场副本。菜单关闭时会被直接从 DOM 摘掉,纯 CSS 没有作用对象 ——
+ * 这份副本由 main.js 的 spawnMenuZombie() 克隆并贴回 body。 */
+body .menu.flra-menu-zombie {
+  pointer-events: none;             /* 副本不可点 */
+  transform-origin: top center !important;
+  animation: flra-menu-out var(--menu-exit-dur) var(--menu-out-ease) forwards !important;
+}
+
+@keyframes flra-menu-out {
+  from { opacity: 1; scale: 1; }
+  to   { opacity: 0; scale: var(--menu-exit-scale); }
+}
+
+/* ===== 6. 减弱动画模式适配 ===== */
+/* 覆盖上面全部动画章节。
  * 必须带 !important:设置页会把时长以行内样式写到 body 上,
  * 普通声明压不过行内样式,无障碍设置就会失效。 */
 @media (prefers-reduced-motion: reduce) {
-  body { --modal-in-dur: 0ms !important; --modal-exit-dur: 0ms !important; }
+  body {
+    --modal-in-dur: 0ms !important; --modal-exit-dur: 0ms !important;
+    --menu-fade-dur: 0ms !important; --menu-slide-dur: 0ms !important;
+    --menu-scale-dur: 0ms !important; --menu-exit-dur: 0ms !important;
+  }
   .app-container { transition: none !important; transform: none !important; filter: none !important; }
 }
 
-/* ===== 5. 设置面板 ===== */
+/* ===== 7. 设置面板 ===== */
 
 /* 曲线输入框:等宽字体更好对齐,也需要比默认更宽 */
 .flra-ease-input {
