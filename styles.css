@@ -163,6 +163,12 @@ body .modal-zombie .modal-content {
   font-family: var(--font-monospace);
 }
 
+/* 选中具名预设时输入框锁定,让"不可编辑"这件事看得出来 */
+.flra-ease-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* 手写的曲线无法被 CSS 解析时的提示 */
 .flra-invalid {
   border-color: var(--text-error) !important;

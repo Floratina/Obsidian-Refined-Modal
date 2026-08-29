@@ -54,8 +54,8 @@ const VAR_MAP = {
 };
 
 /*
- * 缓动曲线预设。后三条正是本插件原始的手调曲线 ——
- * 设置页没有重置按钮,靠这几个预设就能随时调回初始手感。
+ * 缓动曲线预设。带 ★ 的三条正是本插件原始的手调曲线,
+ * 也就是 DEFAULTS 里的取值,重置按钮会回到它们。
  */
 const EASE_PRESETS = {
   线性: "cubic-bezier(0,0,1,1)",
@@ -407,67 +407,137 @@ class FlraSettingTab extends PluginSettingTab {
       name: "背景退出曲线",
       key: "bgOutEase",
     });
+
+    /* --- 全局重置 --- */
+    // 放在最底部而不是顶部:这是破坏性操作,不该出现在容易误点的位置
+    new Setting(containerEl)
+      .setName("重置全部参数")
+      .setDesc("把上面所有参数一次性恢复到插件默认值。")
+      .addButton((b) =>
+        b
+          .setButtonText("重置全部")
+          .setWarning()
+          .onClick(() => {
+            new ConfirmModal(this.app, {
+              title: "重置全部参数",
+              body: "所有参数都会恢复到插件默认值,当前手调的数值会丢失,且无法撤销。",
+              confirmText: "重置",
+              onConfirm: () => {
+                Object.assign(this.plugin.settings, DEFAULTS);
+                this.plugin.applyAndSave(); // 不传 key = 全量写入
+                this.display(); // 重绘面板,把所有控件同步过来
+              },
+            }).open();
+          })
+      );
   }
 
   /**
-   * 数值滑块。
+   * 数值滑块 + 重置按钮。
    * scale 用于「界面按百分比显示、内部按倍数存储」:界面值 = 存储值 * scale。
    */
   slider(containerEl, { name, desc, key, min, max, step, scale = 1, suffix = "" }) {
-    const shown = Math.round(this.plugin.settings[key] * scale * 1000) / 1000;
+    // 浮点误差:1.005 * 100 === 100.49999999999999,不修一下滑块会落在错的档位
+    const toShown = (stored) => Math.round(stored * scale * 1000) / 1000;
+    let comp;
 
     new Setting(containerEl)
       .setName(name)
       .setDesc(suffix ? `${desc}(单位 ${suffix})` : desc)
-      .addSlider((s) =>
-        s
-          .setLimits(min, max, step)
-          .setValue(shown)
+      .addSlider((s) => {
+        comp = s;
+        s.setLimits(min, max, step)
+          .setValue(toShown(this.plugin.settings[key]))
           .setDynamicTooltip()
           .onChange((v) => {
             this.plugin.settings[key] = scale === 1 ? v : v / scale;
+            this.plugin.applyAndSave(key);
+          });
+      })
+      .addExtraButton((b) =>
+        b
+          .setIcon("rotate-ccw")
+          .setTooltip(`恢复默认值 ${toShown(DEFAULTS[key])}${suffix}`)
+          .onClick(() => {
+            this.plugin.settings[key] = DEFAULTS[key];
+            comp.setValue(toShown(DEFAULTS[key]));
             this.plugin.applyAndSave(key);
           })
       );
   }
 
-  /** 缓动曲线行:下拉只负责往文本框填值,文本框才是真值来源 */
+  /**
+   * 缓动曲线行:下拉 + 文本框 + 重置按钮。
+   *
+   * 选中具名预设时文本框锁定(只读展示),选「自定义」才解锁手写。
+   * 这样就不会出现"下拉显示某预设、文本框却是别的值"的错位状态。
+   */
   ease(containerEl, { name, key }) {
+    let dropdown;
     let text;
+    // 程序性地同步控件时要屏蔽 onChange,否则会误触"切到自定义"的分支
+    let syncing = false;
+
+    /** 把两个控件和禁用态一起对齐到给定值 */
+    const sync = (v) => {
+      syncing = true;
+      const preset = EASE_PRESET_VALUES.has(v);
+      dropdown.setValue(preset ? v : "");
+      text.setValue(v);
+      text.setDisabled(preset);
+      text.inputEl.removeClass("flra-invalid");
+      syncing = false;
+    };
 
     const setting = new Setting(containerEl)
       .setName(name)
-      .setDesc("从预设里挑一个,或者直接手写 cubic-bezier(...)。");
+      .setDesc("选「自定义」可手写 cubic-bezier(...)。");
 
     setting.addDropdown((d) => {
-      d.addOption("", "预设…");
+      dropdown = d;
+      d.addOption("", "自定义");
       for (const [label, value] of Object.entries(EASE_PRESETS)) d.addOption(value, label);
-      // 当前值不在预设里就停在「预设…」上,表示这是自定义曲线
-      d.setValue(EASE_PRESET_VALUES.has(this.plugin.settings[key]) ? this.plugin.settings[key] : "");
       d.onChange((v) => {
-        if (!v) return;
+        if (syncing) return;
+        if (!v) {
+          // 切到自定义:解锁输入框,值先保持不变,等用户改
+          text.setDisabled(false);
+          text.inputEl.focus();
+          return;
+        }
         this.plugin.settings[key] = v;
-        text.setValue(v);
-        text.inputEl.removeClass("flra-invalid");
+        sync(v);
         this.plugin.applyAndSave(key);
       });
     });
 
     setting.addText((t) => {
       text = t;
-      t.setPlaceholder("cubic-bezier(.25,.1,.25,1)")
-        .setValue(this.plugin.settings[key])
-        .onChange((v) => {
-          const val = v.trim();
-          const ok = val !== "" && CSS.supports("transition-timing-function", val);
-          t.inputEl.toggleClass("flra-invalid", !ok);
-          // 非法值不写入,保留上一个能用的值
-          if (!ok) return;
-          this.plugin.settings[key] = val;
-          this.plugin.applyAndSave(key);
-        });
+      t.setPlaceholder("cubic-bezier(.25,.1,.25,1)").onChange((v) => {
+        if (syncing) return;
+        const val = v.trim();
+        const ok = val !== "" && CSS.supports("transition-timing-function", val);
+        t.inputEl.toggleClass("flra-invalid", !ok);
+        // 非法值不写入,保留上一个能用的值
+        if (!ok) return;
+        this.plugin.settings[key] = val;
+        this.plugin.applyAndSave(key);
+      });
       t.inputEl.addClass("flra-ease-input");
     });
+
+    setting.addExtraButton((b) =>
+      b
+        .setIcon("rotate-ccw")
+        .setTooltip("恢复默认曲线")
+        .onClick(() => {
+          this.plugin.settings[key] = DEFAULTS[key];
+          sync(DEFAULTS[key]);
+          this.plugin.applyAndSave(key);
+        })
+    );
+
+    sync(this.plugin.settings[key]); // 初始化:两个控件都要建好之后才能调
   }
 }
 
@@ -488,6 +558,36 @@ class PreviewModal extends Modal {
         .setCta()
         .onClick(() => this.close())
     );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+/* ===== 破坏性操作的确认弹窗 ===== */
+
+class ConfirmModal extends Modal {
+  constructor(app, opts) {
+    super(app);
+    this.opts = opts;
+  }
+
+  onOpen() {
+    this.titleEl.setText(this.opts.title);
+    this.contentEl.createEl("p", { text: this.opts.body });
+
+    new Setting(this.contentEl)
+      .addButton((b) => b.setButtonText("取消").onClick(() => this.close()))
+      .addButton((b) =>
+        b
+          .setButtonText(this.opts.confirmText)
+          .setWarning()
+          .onClick(() => {
+            this.close();
+            this.opts.onConfirm();
+          })
+      );
   }
 
   onClose() {
