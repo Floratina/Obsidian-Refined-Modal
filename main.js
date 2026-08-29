@@ -32,9 +32,6 @@ const DEFAULTS = {
   modalOutEase: "cubic-bezier(.07,.86,.32,1)",
   bgInEase: "cubic-bezier(0.18,0.89,0.32,1)",
   bgOutEase: "cubic-bezier(0.18,0.89,0.32,1)",
-  // 启动预热(实验性,默认关闭)
-  warmupEnabled: false,
-  warmupSize: 2,
 };
 
 /* 设置键 -> [CSS 变量名, 单位] */
@@ -105,75 +102,16 @@ module.exports = class FlraAnimationHelper extends Plugin {
     this.applyVars();
     this.register(() => this.clearVars());
 
-    this.warmUpCompositor();
     this.setupBackgroundObserver();
     this.patchModalClose();
 
     this.addSettingTab(new FlraSettingTab(this.app, this));
   }
 
-  /*
-   * 启动预热(实验性,默认关闭)。
-   *
-   * 开 Obsidian 后第一个弹窗总会掉帧,之后不会 —— 是一次性开销:第一次执行
-   * backdrop-filter: blur() 时 Chromium 要编译模糊 shader、链接 GPU program,
-   * 并首次建立合成层。这里趁启动阶段(本来就在加载,掉一帧看不出来)先真实
-   * 渲染一次,把这笔开销提前付掉。
-   *
-   * 之前试过用 opacity:0.001 的全屏遮罩预热,实测无效 —— 多半是被 Chromium
-   * 当作不可见而跳过了绘制。所以改成在右下角放一块真实可见的小区域。
-   *
-   * 尺寸做成可调是有意的:如果首次开销的大头不是 shader 编译而是全屏 backdrop
-   * 的首次栅格化,那小方块就 warm 不到。用尺寸滑块可以直接把这件事测出来。
-   */
-  warmUpCompositor() {
-    if (!this.settings.warmupEnabled) return;
-
-    let raf = 0;
-    let el = null;
-    let cancelled = false;
-
-    const cleanup = () => {
-      cancelAnimationFrame(raf);
-      el?.remove();
-      el = null;
-    };
-
-    this.register(() => {
-      cancelled = true;
-      cleanup();
-    });
-
-    this.app.workspace.onLayoutReady(() => {
-      if (cancelled) return;
-
-      const size = Math.max(1, Number(this.settings.warmupSize) || 1);
-      el = document.body.createDiv({ cls: "flra-warmup" });
-      el.style.width = `${size}px`;
-      el.style.height = `${size}px`;
-
-      // 用 rAF 计帧而不是 setTimeout:要的是"确实被绘制过若干帧",
-      // 定时器在窗口未绘制时照样会走完。
-      let frames = 10;
-      const step = () => {
-        if (cancelled) return;
-        if (--frames > 0) {
-          raf = requestAnimationFrame(step);
-          return;
-        }
-        cleanup();
-      };
-      raf = requestAnimationFrame(step);
-    });
-  }
-
   /* ===== 设置 <-> CSS 变量 ===== */
 
   applyVar(key) {
-    const entry = VAR_MAP[key];
-    // 有些设置(启动预热开关/尺寸)不是 CSS 变量,跳过
-    if (!entry) return;
-    const [name, unit] = entry;
+    const [name, unit] = VAR_MAP[key];
     document.body.style.setProperty(name, `${this.settings[key]}${unit}`);
   }
 
@@ -468,48 +406,6 @@ class FlraSettingTab extends PluginSettingTab {
     this.ease(containerEl, {
       name: "背景退出曲线",
       key: "bgOutEase",
-    });
-
-    /* --- 启动预热 --- */
-    new Setting(containerEl).setName("启动预热(实验性)").setHeading();
-
-    let warmupToggle;
-    new Setting(containerEl)
-      .setName("启用启动预热")
-      .setDesc(
-        "启动时在屏幕右下角用一小块区域真实跑一次背景模糊,把首次开销提前付掉," +
-          "让开 Obsidian 后的第一个弹窗不掉帧。不给它填充色是有意的:它压着的是纯色区域," +
-          "纯色模糊之后还是同一个纯色,本来就看不见;盖不透明背景反而可能被浏览器判定为" +
-          "完全遮挡而跳过滤镜。改动后需重启 Obsidian 才生效。"
-      )
-      .addToggle((t) => {
-        warmupToggle = t;
-        t.setValue(this.plugin.settings.warmupEnabled).onChange((v) => {
-          this.plugin.settings.warmupEnabled = v;
-          this.plugin.applyAndSave("warmupEnabled");
-        });
-      })
-      .addExtraButton((b) =>
-        b
-          .setIcon("rotate-ccw")
-          .setTooltip("恢复默认值(关闭)")
-          .onClick(() => {
-            this.plugin.settings.warmupEnabled = DEFAULTS.warmupEnabled;
-            warmupToggle.setValue(DEFAULTS.warmupEnabled);
-            this.plugin.applyAndSave("warmupEnabled");
-          })
-      );
-
-    this.slider(containerEl, {
-      name: "预热区域尺寸",
-      desc:
-        "如果 2px 没效果、放大到几百 px 才有,说明首次开销的大头是全屏 backdrop 的栅格化" +
-        "而不是 shader 编译。尺寸越大越可能起效,也越可能在启动时瞥见一下。",
-      key: "warmupSize",
-      min: 1,
-      max: 300,
-      step: 1,
-      suffix: "px",
     });
 
     /* --- 全局重置 --- */
