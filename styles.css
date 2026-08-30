@@ -107,6 +107,19 @@ body .modal-container {
   z-index: 60 !important;
 }
 
+/*
+ * 浮层要压过弹窗。
+ *
+ * .suggestion-container 实测也是 z-index:60,和上面这条撞了个正着。z-index 打平时
+ * 由 DOM 顺序决定谁在上,而浮层挂在 .app-container 里(见 1a 的注释),
+ * .app-container 在 body 中排在 .modal-container 之前 —— 平局判负,浮层被弹窗盖住。
+ *
+ * .menu 没这个毛病:它作为 body 子元素挂在 .modal-container 之后,同样打平但顺序赢了。
+ */
+body .suggestion-container {
+  z-index: 65 !important;
+}
+
 /* ===== 3. 入场动画 (由大变小) ===== */
 body.modal-open .modal-container:not(.modal-zombie) .modal,
 body.modal-open .modal-container:not(.modal-zombie) .prompt,

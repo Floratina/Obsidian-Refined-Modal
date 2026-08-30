@@ -11,3 +11,4 @@ _probe.js
 # 它存的是手调出来的动画参数,本身就是想被备份的东西。
 # 如果嫌每次拖滑块都弄脏工作区,可以:
 #   git update-index --skip-worktree data.json
+CMSG.tmp
