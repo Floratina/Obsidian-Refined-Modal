@@ -47,14 +47,27 @@ body {
 
 /* ===== 1. 背景层效果 (app-container) ===== */
 
-/* 1a. 缩放动画 (仅 transform，纯 GPU) */
-.app-container {
+/* 1a. 缩放动画 (仅 transform，纯 GPU)
+ *
+ * 缩放刻意加在 .app-container 的**子元素**上,而不是它自己。
+ *
+ * 原因:transform 只要不是 none(哪怕 scale(1))就会创建层叠上下文。而
+ * Obsidian 和插件会把浮层直接 appendChild 到 .app-container 里 —— 比如
+ * fuzzy-chinese-pinyin 的标签下拉框走的就是 app.dom.appContainerEl。
+ * 一旦 .app-container 成了层叠上下文,这些浮层就被关在里面,而整个
+ * .app-container 又在 z-index:60 的弹窗之下,浮层再高的 z-index 也爬不出去,
+ * 表现就是下拉框被弹窗挡住。顺带 pointer-events:none 还会继承下去,
+ * 就算看得见也点不动。
+ *
+ * 把缩放下放一层,.app-container 自身保持 transform:none,浮层就自由了。
+ * 排除列表里的几个类名就是这些浮层,它们不该跟着背景一起缩放。 */
+.app-container > *:not(.suggestion-container):not(.menu):not(.tooltip) {
   transform-origin: center 30%;
   backface-visibility: hidden;
   transition: transform var(--bg-out-dur) var(--bg-out-ease);
 }
 
-body.modal-open .app-container {
+body.modal-open .app-container > *:not(.suggestion-container):not(.menu):not(.tooltip) {
   will-change: transform;
   transition: transform var(--bg-in-dur) var(--bg-in-ease);
   transform: scale(var(--bg-scale-target));
@@ -296,7 +309,7 @@ body.flra-glass.flra-glass-tint .suggestion-container {
     --menu-fade-dur: 0ms !important; --menu-slide-dur: 0ms !important;
     --menu-scale-dur: 0ms !important; --menu-exit-dur: 0ms !important;
   }
-  .app-container { transition: none !important; transform: none !important; filter: none !important; }
+  .app-container > * { transition: none !important; transform: none !important; filter: none !important; }
 }
 
 /* ===== 8. 设置面板 ===== */
