@@ -3,10 +3,10 @@
   "bgDimOpacity": 0,
   "bgContrast": 1,
   "bgSaturation": 1.26,
-  "bgScaleTarget": 1.005,
+  "bgScaleTarget": 0.996,
   "modalInDur": 165,
   "modalExitDur": 200,
-  "bgInDur": 220,
+  "bgInDur": 190,
   "bgOutDur": 115,
   "modalLargeScale": 0.96,
   "modalExitScale": 0.975,
@@ -23,5 +23,12 @@
   "menuInEase": "cubic-bezier(0,.7,.36,1)",
   "menuExitDur": 30,
   "menuExitScale": 0.985,
-  "menuOutEase": "cubic-bezier(.3,0,.8,.5)"
+  "menuOutEase": "cubic-bezier(.3,0,.8,.5)",
+  "glassEnabled": true,
+  "glassTintEnabled": true,
+  "glassAlpha": 70,
+  "glassBlur": 10,
+  "glassBrightness": 1.2,
+  "glassContrast": 1,
+  "glassSaturation": 1.2
 }
