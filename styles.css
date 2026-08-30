@@ -272,14 +272,18 @@ body .menu.flra-menu-zombie.flra-menu-up {
  * 各控件的底色不一样,先各自把底色声明成一个局部变量,下面共用同一套玻璃配方。
  * 这样加控件只需要多写一行底色,不用把整段滤镜复制一遍。
  *
- * .mod-settings 是 Obsidian 的设置窗口,一律排除 —— 新版设置开在独立的系统
- * 窗口里,那里 backdrop-filter 身后没有页面内容可模糊,只会露出黑底。
- * 这不是我们独有的问题,Cupertino 这类做毛玻璃的主题同样中招。
+ * body:not(.is-popout-window) 把所有独立窗口整体排除 —— 那里 backdrop-filter
+ * 身后没有页面内容可模糊,只会露出黑底。这不是我们独有的问题,Cupertino
+ * 这类做毛玻璃的主题在新版设置窗口上同样中招。
+ *
+ * 之所以按「是不是独立窗口」而不是按「是不是设置」来排除:主窗口内的旧版
+ * 设置模态框该有毛玻璃就有,而任何被拖进独立窗口的东西都该自动跳过,
+ * 不用为每种控件单列特例。
  */
-body.flra-glass .modal:not(.mod-settings) { --flra-tint: var(--modal-background, var(--background-primary)); }
-body.flra-glass .prompt                   { --flra-tint: var(--background-primary); }
-body.flra-glass .menu                     { --flra-tint: var(--background-secondary); }
-body.flra-glass .suggestion-container     { --flra-tint: var(--background-primary); }
+body:not(.is-popout-window).flra-glass .modal                { --flra-tint: var(--modal-background, var(--background-primary)); }
+body:not(.is-popout-window).flra-glass .prompt               { --flra-tint: var(--background-primary); }
+body:not(.is-popout-window).flra-glass .menu                 { --flra-tint: var(--background-secondary); }
+body:not(.is-popout-window).flra-glass .suggestion-container { --flra-tint: var(--background-primary); }
 
 /*
  * 玻璃本体。用 !important 是因为主题(尤其是被 Style Settings 改过的)几乎必然
@@ -287,10 +291,10 @@ body.flra-glass .suggestion-container     { --flra-tint: var(--background-primar
  *
  * 默认是无色玻璃 —— 背景完全透明,只留滤镜。要底色的话由下面那条规则叠加。
  */
-body.flra-glass .modal:not(.mod-settings),
-body.flra-glass .prompt,
-body.flra-glass .menu,
-body.flra-glass .suggestion-container {
+body:not(.is-popout-window).flra-glass .modal,
+body:not(.is-popout-window).flra-glass .prompt,
+body:not(.is-popout-window).flra-glass .menu,
+body:not(.is-popout-window).flra-glass .suggestion-container {
   background-color: transparent !important;
   backdrop-filter:
     blur(var(--flra-glass-blur))
@@ -305,10 +309,10 @@ body.flra-glass .suggestion-container {
 }
 
 /* 开了「保留原背景色」才把底色按指定不透明度混进来 */
-body.flra-glass.flra-glass-tint .modal:not(.mod-settings),
-body.flra-glass.flra-glass-tint .prompt,
-body.flra-glass.flra-glass-tint .menu,
-body.flra-glass.flra-glass-tint .suggestion-container {
+body:not(.is-popout-window).flra-glass.flra-glass-tint .modal,
+body:not(.is-popout-window).flra-glass.flra-glass-tint .prompt,
+body:not(.is-popout-window).flra-glass.flra-glass-tint .menu,
+body:not(.is-popout-window).flra-glass.flra-glass-tint .suggestion-container {
   background-color: color-mix(in srgb, var(--flra-tint) var(--flra-glass-alpha), transparent) !important;
 }
 
