@@ -17,40 +17,40 @@ const DEFAULTS = {
   bgBlurPixels: 15,
   bgDimOpacity: 0,
   bgContrast: 1.0,
-  bgSaturation: 1.05,
-  bgScaleTarget: 1.005,
+  bgSaturation: 1.26,
+  bgScaleTarget: 0.984,
   // 时间 (ms)
-  modalInDur: 260,
-  modalExitDur: 185,
-  bgInDur: 225,
+  modalInDur: 165,
+  modalExitDur: 200,
+  bgInDur: 190,
   bgOutDur: 115,
   // 缩放
-  modalLargeScale: 1.05,
-  modalExitScale: 1.02,
+  modalLargeScale: 0.96,
+  modalExitScale: 0.975,
   // 缓动曲线
   modalInEase: "cubic-bezier(.04,.5,.23,1)",
-  modalOutEase: "cubic-bezier(.07,.86,.32,1)",
+  modalOutEase: "cubic-bezier(.05,.7,.01,1)",
   bgInEase: "cubic-bezier(0.18,0.89,0.32,1)",
-  bgOutEase: "cubic-bezier(0.18,0.89,0.32,1)",
+  bgOutEase: "cubic-bezier(0.25,0.1,0.25,1)",
 
   // 右键菜单(入场取值对齐原 snippet,退场是插件独有的新东西)
-  menuAnimEnabled: false,
-  menuFadeDur: 250,
-  menuSlideDur: 160,
-  menuScaleDur: 160,
-  menuSlideDistance: 14,
-  menuScaleStart: 0.96,
+  menuAnimEnabled: true,
+  menuFadeDur: 155,
+  menuSlideDur: 120,
+  menuScaleDur: 115,
+  menuSlideDistance: 7,
+  menuScaleStart: 0.985,
   menuInEase: "cubic-bezier(0,.7,.36,1)",
-  menuExitDur: 120,
-  menuExitScale: 0.97,
+  menuExitDur: 30,
+  menuExitScale: 0.985,
   menuOutEase: "cubic-bezier(.3,0,.8,.5)",
 
   // 毛玻璃
-  glassEnabled: false,
+  glassEnabled: true,
   glassTintEnabled: true,
-  glassAlpha: 72,
-  glassBlur: 12,
-  glassBrightness: 1.0,
+  glassAlpha: 70,
+  glassBlur: 10,
+  glassBrightness: 1.2,
   glassContrast: 1.0,
   glassSaturation: 1.2,
 };
@@ -94,21 +94,26 @@ const VAR_MAP = {
 };
 
 /*
- * 缓动曲线预设。带 ★ 的三条正是本插件原始的手调曲线,
- * 也就是 DEFAULTS 里的取值,重置按钮会回到它们。
+ * 缓动曲线选项:自定义 / 默认 / 缓入或缓出 / 线性。
+ * 「默认」是这一项在 DEFAULTS 里的手调曲线,各部分(背景、弹窗、菜单)各不相同;
+ * 进入的行给 ease-in「缓入」,退出的行给 ease-out「缓出」。
+ * 若默认值恰好等于其中某条,就不再重复列出。
  */
-const EASE_PRESETS = {
-  线性: "cubic-bezier(0,0,1,1)",
-  "标准减速 (ease-out)": "cubic-bezier(0.25,0.1,0.25,1)",
-  缓入缓出: "cubic-bezier(0.4,0,0.2,1)",
-  "柔和减速 ★背景默认": "cubic-bezier(0.18,0.89,0.32,1)",
-  "急停 ★入场默认": "cubic-bezier(.04,.5,.23,1)",
-  "长尾收束 ★出场默认": "cubic-bezier(.07,.86,.32,1)",
-  "菜单入场 ★默认": "cubic-bezier(0,.7,.36,1)",
-  "菜单退场 ★默认": "cubic-bezier(.3,0,.8,.5)",
-  轻微回弹: "cubic-bezier(0.34,1.56,0.64,1)",
-};
-const EASE_PRESET_VALUES = new Set(Object.values(EASE_PRESETS));
+const EASE_IN = "cubic-bezier(0.42,0,1,1)"; // CSS 的 ease-in
+const EASE_OUT = "cubic-bezier(0,0,0.58,1)"; // CSS 的 ease-out
+const EASE_LINEAR = "cubic-bezier(0,0,1,1)";
+
+/** 返回 [值 -> 显示名] 的有序表,不含「自定义」 */
+function easeOptionsFor(key) {
+  const exiting = /out/i.test(key);
+  const opts = { [DEFAULTS[key]]: "默认" };
+  const pairs = exiting ? [[EASE_OUT, "缓出"]] : [[EASE_IN, "缓入"]];
+  pairs.push([EASE_LINEAR, "线性"]);
+  for (const [value, label] of pairs) {
+    if (!(value in opts)) opts[value] = label;
+  }
+  return opts;
+}
 
 /*
  * 把 CSS 时间值解析成毫秒。
@@ -837,11 +842,12 @@ class FlraSettingTab extends PluginSettingTab {
     let text;
     // 程序性地同步控件时要屏蔽 onChange,否则会误触"切到自定义"的分支
     let syncing = false;
+    const options = easeOptionsFor(key);
 
     /** 把两个控件和禁用态一起对齐到给定值 */
     const sync = (v) => {
       syncing = true;
-      const preset = EASE_PRESET_VALUES.has(v);
+      const preset = v in options;
       dropdown.setValue(preset ? v : "");
       text.setValue(v);
       text.setDisabled(preset);
@@ -856,7 +862,7 @@ class FlraSettingTab extends PluginSettingTab {
     setting.addDropdown((d) => {
       dropdown = d;
       d.addOption("", "自定义");
-      for (const [label, value] of Object.entries(EASE_PRESETS)) d.addOption(value, label);
+      for (const [value, label] of Object.entries(options)) d.addOption(value, label);
       d.onChange((v) => {
         if (syncing) return;
         if (!v) {

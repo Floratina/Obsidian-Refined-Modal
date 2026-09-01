@@ -7,40 +7,40 @@ body {
   --bg-blur-pixels: 15px;           /* 背景模糊像素 */
   --bg-dim-opacity: 0;           /* 背景变暗程度 */
   --bg-contrast: 1.00;              /* 背景对比度 */
-  --bg-saturation: 1.05;            /* 背景饱和度 */
-  --bg-scale-target: 1.005;         /* 背景缩放目标值 */
+  --bg-saturation: 1.26;            /* 背景饱和度 */
+  --bg-scale-target: 0.984;         /* 背景缩放目标值 */
   
   /* --- 动画曲线 (Cubic Bezier) --- */
   --modal-in-ease:  cubic-bezier(.04,.5,.23,1);      /* 弹窗入场曲线 */
-  --modal-out-ease: cubic-bezier(.07,.86,.32,1);     /* 弹窗出场曲线 */
+  --modal-out-ease: cubic-bezier(.05,.7,.01,1);     /* 弹窗出场曲线 */
   --bg-in-ease:     cubic-bezier(0.18, 0.89, 0.32, 1);    /* 背景进入曲线 */
-  --bg-out-ease:    cubic-bezier(0.18, 0.89, 0.32, 1);    /* 背景恢复曲线 */
+  --bg-out-ease:    cubic-bezier(0.25, 0.1, 0.25, 1);    /* 背景恢复曲线 */
 
   /* --- 时间设置 --- */
-  --modal-in-dur:   260ms;          /* 弹窗入场耗时 */
-  --modal-exit-dur: 185ms;          /* 弹窗出场耗时 (副本存活时间由 JS 读取本值自动跟随) */
-  --bg-in-dur:      225ms;          /* 背景进入耗时 */
+  --modal-in-dur:   165ms;          /* 弹窗入场耗时 */
+  --modal-exit-dur: 200ms;          /* 弹窗出场耗时 (副本存活时间由 JS 读取本值自动跟随) */
+  --bg-in-dur:      190ms;          /* 背景进入耗时 */
   --bg-out-dur:     115ms;          /* 背景退出耗时 */
 
   /* --- 缩放幅度 --- */
-  --modal-large-scale: 1.05;        /* 入场时的起始尺寸 */
-  --modal-exit-scale:  1.02;        /* 出场时的结束尺寸 */
+  --modal-large-scale: 0.96;        /* 入场时的起始尺寸 */
+  --modal-exit-scale:  0.975;        /* 出场时的结束尺寸 */
 
   /* --- 右键菜单 (入场取值来自原 snippet,退场是插件新增的) --- */
-  --menu-fade-dur:       250ms;     /* 淡入时长 */
-  --menu-slide-dur:      160ms;     /* 下滑时长 */
-  --menu-scale-dur:      160ms;     /* 缩放时长 */
-  --menu-slide-distance: 14px;      /* 下滑起始偏移 */
-  --menu-scale-start:    0.96;      /* 缩放起始比例 */
+  --menu-fade-dur:       155ms;     /* 淡入时长 */
+  --menu-slide-dur:      120ms;     /* 下滑时长 */
+  --menu-scale-dur:      115ms;     /* 缩放时长 */
+  --menu-slide-distance: 7px;      /* 下滑起始偏移 */
+  --menu-scale-start:    0.985;      /* 缩放起始比例 */
   --menu-in-ease:  cubic-bezier(0,.7,.36,1);    /* 菜单入场曲线 */
-  --menu-exit-dur:   120ms;         /* 退场时长 */
-  --menu-exit-scale: 0.97;          /* 退场结束尺寸 */
+  --menu-exit-dur:   30ms;         /* 退场时长 */
+  --menu-exit-scale: 0.985;          /* 退场结束尺寸 */
   --menu-out-ease: cubic-bezier(.3,0,.8,.5);    /* 菜单退场曲线 */
 
   /* --- 毛玻璃 (默认关闭,由 body.flra-glass 启用) --- */
-  --flra-glass-alpha:      72%;     /* 混入原背景色的不透明度 */
-  --flra-glass-blur:       12px;    /* 玻璃背后的模糊半径 */
-  --flra-glass-brightness: 1;       /* 背景亮度 */
+  --flra-glass-alpha:      70%;     /* 混入原背景色的不透明度 */
+  --flra-glass-blur:       10px;    /* 玻璃背后的模糊半径 */
+  --flra-glass-brightness: 1.2;       /* 背景亮度 */
   --flra-glass-contrast:   1;       /* 背景对比度 */
   --flra-glass-saturation: 1.2;     /* 背景饱和度 */
 }
