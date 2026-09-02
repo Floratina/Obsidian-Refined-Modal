@@ -214,20 +214,36 @@ module.exports = class FlraAnimationHelper extends Plugin {
   /*
    * 判断菜单的展开方向,向上展开的打上 flra-menu-up,让 CSS 把滑动整个镜像。
    *
-   * Obsidian 没有提供翻转标记(MenuPositionDef 只有横向的 left),只能自己算。
-   * 这里刻意读行内 style.top 而不是 getBoundingClientRect() —— 后者会强制同步
-   * 布局,在这个 vault 里(627KB 主题 + 50 个 snippet)一次全文档重算要几十毫秒。
-   * style.top 是 Obsidian 自己刚写进去的字符串,读它不触发任何布局。
+   * 二级及更深的子菜单一律按向下处理:它们贴着父项展开,顶边基本与指针齐平,
+   * 下面那套按 top 和指针比高低的启发式对它们时准时不准,观感上很割裂。
+   *
+   * 一级菜单才真的去猜。Obsidian 没有提供翻转标记(MenuPositionDef 只有横向的
+   * left),只能自己算。这里刻意读行内 style.top 而不是 getBoundingClientRect()
+   * —— 后者会强制同步布局,在这个 vault 里(627KB 主题 + 50 个 snippet)一次
+   * 全文档重算要几十毫秒。style.top 是 Obsidian 自己刚写进去的字符串,读它不
+   * 触发任何布局。
    *
    * 前提:菜单是 fixed 定位,top 即视口坐标。读不出来就按默认的向下展开处理。
    */
-  markMenuDirection(menuEl) {
-    const top = parseFloat(menuEl.style.top);
-    const p = this.lastPointer;
-    // 指针位置太旧(键盘唤起、showAtPosition 等)就不猜,按向下处理
-    const fresh = p && performance.now() - p.t < 2000;
-    const openedUp = fresh && isFinite(top) && top < p.y - 4;
+  markMenuDirection(menuEl, isSubmenu) {
+    let openedUp = false;
+    if (!isSubmenu) {
+      const top = parseFloat(menuEl.style.top);
+      const p = this.lastPointer;
+      // 指针位置太旧(键盘唤起、showAtPosition 等)就不猜,按向下处理
+      const fresh = p && performance.now() - p.t < 2000;
+      openedUp = fresh && isFinite(top) && top < p.y - 4;
+    }
     menuEl.classList.toggle("flra-menu-up", !!openedUp);
+  }
+
+  /*
+   * 子菜单没有官方标记,靠"开这个菜单的时候已经有别的菜单开着"来认。
+   * 调用时 node 自己已经在 body 里了,所以是 >1 而不是 >0。
+   * 退场副本带 flra-menu-zombie,不算数。
+   */
+  isSubmenu() {
+    return document.body.querySelectorAll(":scope > .menu:not(.flra-menu-zombie)").length > 1;
   }
 
   setupBodyObserver() {
@@ -246,7 +262,7 @@ module.exports = class FlraAnimationHelper extends Plugin {
           if (!node.classList.contains("menu")) continue;
           // 副本的方向是克隆时带过来的,不能按当前指针重新算
           if (node.classList.contains("flra-menu-zombie")) continue;
-          this.markMenuDirection(node);
+          this.markMenuDirection(node, this.isSubmenu());
         }
 
         // 菜单关闭时是被直接 detach 的,CSS 再没有作用对象 ——
