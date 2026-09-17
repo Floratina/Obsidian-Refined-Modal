@@ -4,7 +4,7 @@
 
 这是一个用于自定义 Obsidian 桌面端界面视觉效果的插件，主要调整各种弹窗和右键菜单的进出场动画，以及背景模糊、透明度和毛玻璃效果，让界面的打开与关闭更加流畅。
 
-插件在 Obsidian 中显示为 **Refined Modal**，插件 ID（标识符）为 `FLRA-animation-helper`。开发目录为 `D:\AppData\obsidian-modal-blur-helper-dev`，插件运行目录为 `D:\文件\Obsidian Vault\Floratina\.obsidian\plugins\modal-blur-helper`。
+插件在 Obsidian 中显示为 **Refined Modal**，插件 ID（标识符）为 `FLRA-animation-helper`。开发目录为 `D:\AppData\obsidian-modal-blur-helper-dev`，插件运行目录为 `D:\文件\Obsidian Vault\Floratina\.obsidian\plugins\refined-modal`。
 
 ## 开发与构建
 

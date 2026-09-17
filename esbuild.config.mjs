@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const pluginDir = "D:/文件/Obsidian Vault/Floratina/.obsidian/plugins/modal-blur-helper";
+const pluginDir = "D:/文件/Obsidian Vault/Floratina/.obsidian/plugins/refined-modal";
 const assets = ["styles.css", "manifest.json"];
 
 await mkdir(pluginDir, { recursive: true });
