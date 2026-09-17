@@ -12,3 +12,4 @@ _probe.js
 # 如果嫌每次拖滑块都弄脏工作区,可以:
 #   git update-index --skip-worktree data.json
 CMSG.tmp
+node_modules/

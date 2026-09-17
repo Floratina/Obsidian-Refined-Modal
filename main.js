@@ -1,5 +1,5 @@
 /*
- * FLRA Animation Helper
+ * Refined Modal
  * 给 Obsidian 弹窗补上进出场动画 + 背景模糊。
  *
  * Obsidian 的 Modal.close() 是直接把 DOM 干掉的,没有退场动画的余地。
@@ -275,7 +275,7 @@ module.exports = class FlraAnimationHelper extends Plugin {
           try {
             this.spawnMenuZombie(node);
           } catch (e) {
-            console.error("[FLRA Animation Helper] 生成菜单退场副本失败", e);
+            console.error("[Refined Modal] 生成菜单退场副本失败", e);
           }
         }
       }
@@ -308,7 +308,7 @@ module.exports = class FlraAnimationHelper extends Plugin {
         try {
           plugin.spawnZombie(this);
         } catch (e) {
-          console.error("[FLRA Animation Helper] 生成退场副本失败", e);
+          console.error("[Refined Modal] 生成退场副本失败", e);
         }
       }
       return originalClose.apply(this, args);

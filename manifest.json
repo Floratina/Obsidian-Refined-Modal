@@ -1,9 +1,10 @@
 {
   "id": "FLRA-animation-helper",
-  "name": "FLRA Animation Helper",
+  "name": "Refined Modal",
+  "description": "Add customizable animations and a frosted-glass effect to the modal windows and right-click menus.",
   "version": "0.1.0",
   "minAppVersion": "1.6.0",
-  "author": "ChatGPT",
+  "author": "Floratina",
   "main": "main.js",
   "isDesktopOnly": true
 }
