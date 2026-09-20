@@ -9,7 +9,8 @@
  * 所有视觉参数都是 body 上的 CSS 变量。styles.css 里有一份默认值,
  * 设置面板通过行内样式覆盖它们(行内优先级高于样式表里的普通声明)。
  */
-const { Plugin, PluginSettingTab, Setting, Modal, debounce } = require("obsidian");
+const { Plugin, PluginSettingTab, Setting, Modal, debounce, getLanguage } = require("obsidian");
+const { LANGUAGE_NAMES, normalizeLanguage, resolveLanguage, translate } = require("./i18n");
 
 /* ===== 默认值:与 styles.css 里 body{} 那一块的初始值一一对应 ===== */
 const DEFAULTS = {
@@ -104,11 +105,11 @@ const EASE_OUT = "cubic-bezier(0,0,0.58,1)"; // CSS 的 ease-out
 const EASE_LINEAR = "cubic-bezier(0,0,1,1)";
 
 /** 返回 [值 -> 显示名] 的有序表,不含「自定义」 */
-function easeOptionsFor(key) {
+function easeOptionsFor(key, t) {
   const exiting = /out/i.test(key);
-  const opts = { [DEFAULTS[key]]: "默认" };
-  const pairs = exiting ? [[EASE_OUT, "缓出"]] : [[EASE_IN, "缓入"]];
-  pairs.push([EASE_LINEAR, "线性"]);
+  const opts = { [DEFAULTS[key]]: t("ease.default") };
+  const pairs = exiting ? [[EASE_OUT, t("ease.out")]] : [[EASE_IN, t("ease.in")]];
+  pairs.push([EASE_LINEAR, t("ease.linear")]);
   for (const [value, label] of pairs) {
     if (!(value in opts)) opts[value] = label;
   }
@@ -130,7 +131,9 @@ function parseDur(raw, fallback) {
 
 module.exports = class FlraAnimationHelper extends Plugin {
   async onload() {
-    this.settings = Object.assign({}, DEFAULTS, await this.loadData());
+    this.settings = Object.assign({ language: "auto" }, DEFAULTS, await this.loadData());
+    this.settings.language = normalizeLanguage(this.settings.language);
+    this.refreshLanguage();
 
     // 每个僵尸副本对应一个 kill 函数,卸载时统一清场
     this.zombies = new Set();
@@ -154,6 +157,14 @@ module.exports = class FlraAnimationHelper extends Plugin {
     this.patchModalClose();
 
     this.addSettingTab(new FlraSettingTab(this.app, this));
+  }
+
+  refreshLanguage() {
+    this.language = resolveLanguage(this.settings.language, getLanguage);
+  }
+
+  t(key, values) {
+    return translate(this.language, key, values);
   }
 
   /* ===== 设置 <-> CSS 变量 ===== */
@@ -406,10 +417,10 @@ module.exports = class FlraAnimationHelper extends Plugin {
  */
 
 const TABS = [
-  ["bg", "背景"],
-  ["modal", "弹窗"],
-  ["menu", "右键菜单"],
-  ["glass", "毛玻璃"],
+  ["bg", "tab.bg"],
+  ["modal", "tab.modal"],
+  ["menu", "tab.menu"],
+  ["glass", "tab.glass"],
 ];
 
 class FlraSettingTab extends PluginSettingTab {
@@ -422,6 +433,8 @@ class FlraSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
+    this.plugin.refreshLanguage();
+    this.flraRenderLanguage(containerEl);
 
     this.flraRenderPreview(containerEl);
 
@@ -429,7 +442,7 @@ class FlraSettingTab extends PluginSettingTab {
     const body = containerEl.createDiv({ cls: "flra-tab-body" });
 
     for (const [id, label] of TABS) {
-      const tab = bar.createDiv({ cls: "flra-tab", text: label });
+      const tab = bar.createDiv({ cls: "flra-tab", text: this.plugin.t(label) });
       tab.toggleClass("is-active", this.flraActiveTab === id);
       tab.addEventListener("click", () => {
         if (this.flraActiveTab === id) return;
@@ -454,22 +467,36 @@ class FlraSettingTab extends PluginSettingTab {
 
   /* ===== 常驻区 ===== */
 
+  flraRenderLanguage(el) {
+    new Setting(el)
+      .setName(this.plugin.t("language.name"))
+      .setDesc(this.plugin.t("language.desc"))
+      .addDropdown((d) => {
+        d.addOption("auto", this.plugin.t("language.auto"));
+        for (const [value, label] of Object.entries(LANGUAGE_NAMES)) d.addOption(value, label);
+        d.setValue(this.plugin.settings.language).onChange((value) => {
+          this.plugin.settings.language = normalizeLanguage(value);
+          this.plugin.saveDebounced();
+          this.display();
+        });
+      });
+  }
+
   flraRenderPreview(el) {
     const preview = new Setting(el)
-      .setName("预览动画")
-      .setDesc("打开一个测试弹窗,直接看当前参数的进出场效果。")
+      .setName(this.plugin.t("preview.name"))
+      .setDesc(this.plugin.t("preview.desc"))
       .addButton((b) =>
         b
-          .setButtonText("打开测试弹窗")
+          .setButtonText(this.plugin.t("preview.open"))
           .setCta()
-          .onClick(() => new PreviewModal(this.app).open())
+          .onClick(() => new PreviewModal(this.app, this.plugin).open())
       );
 
     // 设置面板被拖到独立窗口时,测试弹窗未必开在同一个窗口里
     if (el.ownerDocument !== document) {
       preview.setDesc(
-        "打开一个测试弹窗,直接看当前参数的进出场效果。" +
-          "你的设置面板在独立窗口里,测试弹窗可能出现在主窗口 —— 没看到的话切过去看看。"
+        this.plugin.t("preview.popout")
       );
     }
   }
@@ -477,17 +504,17 @@ class FlraSettingTab extends PluginSettingTab {
   flraRenderResetAll(el) {
     // 破坏性操作,放在最底部而不是顶部,不该出现在容易误点的位置
     new Setting(el)
-      .setName("重置全部参数")
-      .setDesc("把所有标签页里的参数一次性恢复到插件默认值。")
+      .setName(this.plugin.t("reset.name"))
+      .setDesc(this.plugin.t("reset.desc"))
       .addButton((b) =>
         b
-          .setButtonText("重置全部")
+          .setButtonText(this.plugin.t("reset.all"))
           .setWarning()
           .onClick(() => {
-            new ConfirmModal(this.app, {
-              title: "重置全部参数",
-              body: "所有标签页里的参数都会恢复到插件默认值,当前手调的数值会丢失,且无法撤销。",
-              confirmText: "重置",
+            new ConfirmModal(this.app, this.plugin, {
+              title: this.plugin.t("reset.name"),
+              body: this.plugin.t("reset.body"),
+              confirmText: this.plugin.t("reset.confirm"),
               onConfirm: () => {
                 Object.assign(this.plugin.settings, DEFAULTS);
                 this.plugin.applyAndSave(); // 不传 key = 全量写入
@@ -502,8 +529,8 @@ class FlraSettingTab extends PluginSettingTab {
 
   flraRenderBg(el) {
     this.flraSlider(el, {
-      name: "模糊强度",
-      desc: "弹窗打开时背景的高斯模糊半径。",
+      name: this.plugin.t("blur.name"),
+      desc: this.plugin.t("bg.blur.desc"),
       key: "bgBlurPixels",
       min: 0,
       max: 40,
@@ -512,8 +539,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "变暗程度",
-      desc: "0 = 完全不变暗,100 = 全黑。",
+      name: this.plugin.t("bg.dim.name"),
+      desc: this.plugin.t("bg.dim.desc"),
       key: "bgDimOpacity",
       min: 0,
       max: 100,
@@ -523,8 +550,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "对比度",
-      desc: "100% 为原始对比度。",
+      name: this.plugin.t("contrast.name"),
+      desc: this.plugin.t("contrast.desc"),
       key: "bgContrast",
       min: 50,
       max: 150,
@@ -534,8 +561,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "饱和度",
-      desc: "100% 为原始饱和度,略微提高能让模糊后的背景不发灰。",
+      name: this.plugin.t("saturation.name"),
+      desc: this.plugin.t("saturation.desc"),
       key: "bgSaturation",
       min: 0,
       max: 200,
@@ -545,10 +572,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "背景缩放",
-      desc:
-        "弹窗打开时背景的缩放目标。大于 100% 是推远(配合由大变小的入场)," +
-        "小于 100% 是收缩(配合由小变大的弹出式入场)。100% 为不缩放。",
+      name: this.plugin.t("bg.scale.name"),
+      desc: this.plugin.t("bg.scale.desc"),
       key: "bgScaleTarget",
       min: 80,
       max: 150,
@@ -558,8 +583,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "背景进入时长",
-      desc: "背景模糊与缩放的进入耗时。",
+      name: this.plugin.t("bg.in.name"),
+      desc: this.plugin.t("bg.in.desc"),
       key: "bgInDur",
       min: 0,
       max: 800,
@@ -568,8 +593,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "背景退出时长",
-      desc: "背景模糊与缩放的恢复耗时。通常比进入更短会更利落。",
+      name: this.plugin.t("bg.out.name"),
+      desc: this.plugin.t("bg.out.desc"),
       key: "bgOutDur",
       min: 0,
       max: 800,
@@ -577,14 +602,14 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "ms",
     });
 
-    this.flraEase(el, { name: "背景进入曲线", key: "bgInEase" });
-    this.flraEase(el, { name: "背景退出曲线", key: "bgOutEase" });
+    this.flraEase(el, { name: this.plugin.t("bg.in.ease"), key: "bgInEase" });
+    this.flraEase(el, { name: this.plugin.t("bg.out.ease"), key: "bgOutEase" });
   }
 
   flraRenderModal(el) {
     this.flraSlider(el, {
-      name: "入场时长",
-      desc: "弹窗出现时的动画耗时。",
+      name: this.plugin.t("in.duration"),
+      desc: this.plugin.t("modal.in.desc"),
       key: "modalInDur",
       min: 0,
       max: 800,
@@ -593,8 +618,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "出场时长",
-      desc: "弹窗消失时的动画耗时。退场副本的存活时间会自动跟随这个值。",
+      name: this.plugin.t("out.duration"),
+      desc: this.plugin.t("modal.out.desc"),
       key: "modalExitDur",
       min: 0,
       max: 800,
@@ -603,8 +628,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "入场起始尺寸",
-      desc: "弹窗从这个尺寸缩到 100%。大于 100% 是「由大变小」,小于则是「弹出」。",
+      name: this.plugin.t("in.size"),
+      desc: this.plugin.t("modal.in.size.desc"),
       key: "modalLargeScale",
       min: 80,
       max: 130,
@@ -614,8 +639,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "出场结束尺寸",
-      desc: "弹窗从 100% 缩放到这个尺寸后消失。",
+      name: this.plugin.t("out.size"),
+      desc: this.plugin.t("modal.out.size.desc"),
       key: "modalExitScale",
       min: 80,
       max: 130,
@@ -624,22 +649,20 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.flraEase(el, { name: "入场曲线", key: "modalInEase" });
-    this.flraEase(el, { name: "出场曲线", key: "modalOutEase" });
+    this.flraEase(el, { name: this.plugin.t("in.ease"), key: "modalInEase" });
+    this.flraEase(el, { name: this.plugin.t("out.ease"), key: "modalOutEase" });
   }
 
   flraRenderMenu(el) {
     this.flraToggle(el, {
-      name: "启用右键菜单动画",
-      desc:
-        "给右键菜单加上入场和退场动画。退场动画是插件独有的 —— " +
-        "菜单关闭时会被直接从 DOM 上摘掉,纯 CSS 没有作用对象,做不到这件事。",
+      name: this.plugin.t("menu.enabled.name"),
+      desc: this.plugin.t("menu.enabled.desc"),
       key: "menuAnimEnabled",
     });
 
     this.flraSlider(el, {
-      name: "淡入时长",
-      desc: "菜单透明度从 0 到 1 的耗时。",
+      name: this.plugin.t("menu.fade.name"),
+      desc: this.plugin.t("menu.fade.desc"),
       key: "menuFadeDur",
       min: 0,
       max: 800,
@@ -648,8 +671,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "滑动时长",
-      desc: "菜单滑动到位、同时展开裁剪的耗时。方向自动跟随菜单的展开方向。",
+      name: this.plugin.t("menu.slide.name"),
+      desc: this.plugin.t("menu.slide.desc"),
       key: "menuSlideDur",
       min: 0,
       max: 800,
@@ -658,8 +681,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "缩放时长",
-      desc: "菜单缩放到原尺寸的耗时。可以和上面两项设成不同值,做出错落感。",
+      name: this.plugin.t("menu.scale.name"),
+      desc: this.plugin.t("menu.scale.desc"),
       key: "menuScaleDur",
       min: 0,
       max: 800,
@@ -668,8 +691,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "滑动距离",
-      desc: "菜单入场时从多远处滑过来。向下展开的从上方滑下来,向上展开的从下方滑上去。",
+      name: this.plugin.t("menu.distance.name"),
+      desc: this.plugin.t("menu.distance.desc"),
       key: "menuSlideDistance",
       min: 0,
       max: 80,
@@ -678,8 +701,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "缩放起始尺寸",
-      desc: "菜单从这个尺寸放大到 100%。",
+      name: this.plugin.t("in.size"),
+      desc: this.plugin.t("menu.in.size.desc"),
       key: "menuScaleStart",
       min: 50,
       max: 130,
@@ -688,11 +711,11 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.flraEase(el, { name: "入场曲线", key: "menuInEase" });
+    this.flraEase(el, { name: this.plugin.t("in.ease"), key: "menuInEase" });
 
     this.flraSlider(el, {
-      name: "退场时长",
-      desc: "菜单消失时的动画耗时。",
+      name: this.plugin.t("out.duration"),
+      desc: this.plugin.t("menu.out.desc"),
       key: "menuExitDur",
       min: 0,
       max: 800,
@@ -701,8 +724,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "退场结束尺寸",
-      desc: "菜单从 100% 缩放到这个尺寸后消失。",
+      name: this.plugin.t("out.size"),
+      desc: this.plugin.t("menu.out.size.desc"),
       key: "menuExitScale",
       min: 50,
       max: 130,
@@ -711,29 +734,25 @@ class FlraSettingTab extends PluginSettingTab {
       suffix: "%",
     });
 
-    this.flraEase(el, { name: "退场曲线", key: "menuOutEase" });
+    this.flraEase(el, { name: this.plugin.t("out.ease"), key: "menuOutEase" });
   }
 
   flraRenderGlass(el) {
     this.flraToggle(el, {
-      name: "启用毛玻璃",
-      desc:
-        "把弹窗、命令面板、右键菜单和编辑器补全浮层换成半透明毛玻璃。" +
-        "注意:这会让每次弹出都多一次背景模糊渲染,机器吃力的话先关掉这个。",
+      name: this.plugin.t("glass.enabled.name"),
+      desc: this.plugin.t("glass.enabled.desc"),
       key: "glassEnabled",
     });
 
     this.flraToggle(el, {
-      name: "保留原背景色",
-      desc:
-        "开启时按下面的不透明度混入控件原本的背景色(弹窗用主背景色、菜单用次级背景色)。" +
-        "关闭则是完全无色的纯玻璃,只剩模糊和滤镜效果。",
+      name: this.plugin.t("glass.tint.name"),
+      desc: this.plugin.t("glass.tint.desc"),
       key: "glassTintEnabled",
     });
 
     this.flraSlider(el, {
-      name: "背景色不透明度",
-      desc: "100% = 完全不透明(看不出玻璃),0% = 完全透明。仅在上一项开启时有效。",
+      name: this.plugin.t("glass.alpha.name"),
+      desc: this.plugin.t("glass.alpha.desc"),
       key: "glassAlpha",
       min: 0,
       max: 100,
@@ -742,8 +761,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "模糊半径",
-      desc: "玻璃背后的高斯模糊半径。和「背景」标签页里那个是各自独立的。",
+      name: this.plugin.t("blur.name"),
+      desc: this.plugin.t("glass.blur.desc"),
       key: "glassBlur",
       min: 0,
       max: 60,
@@ -752,8 +771,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "背景亮度",
-      desc: "100% 为原始亮度。调高做出「亮玻璃」,调低做出「暗玻璃」。",
+      name: this.plugin.t("glass.brightness.name"),
+      desc: this.plugin.t("brightness.desc"),
       key: "glassBrightness",
       min: 20,
       max: 200,
@@ -763,8 +782,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "背景对比度",
-      desc: "100% 为原始对比度。",
+      name: this.plugin.t("glass.contrast.name"),
+      desc: this.plugin.t("contrast.desc"),
       key: "glassContrast",
       min: 20,
       max: 200,
@@ -774,8 +793,8 @@ class FlraSettingTab extends PluginSettingTab {
     });
 
     this.flraSlider(el, {
-      name: "背景饱和度",
-      desc: "100% 为原始饱和度。适度提高能让玻璃背后的颜色更透亮。",
+      name: this.plugin.t("glass.saturation.name"),
+      desc: this.plugin.t("saturation.desc"),
       key: "glassSaturation",
       min: 0,
       max: 300,
@@ -798,7 +817,7 @@ class FlraSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName(name)
-      .setDesc(suffix ? `${desc}(单位 ${suffix})` : desc)
+      .setDesc(suffix ? this.plugin.t("control.unit", { description: desc, unit: suffix }) : desc)
       .addSlider((s) => {
         comp = s;
         s.setLimits(min, max, step)
@@ -812,7 +831,7 @@ class FlraSettingTab extends PluginSettingTab {
       .addExtraButton((b) =>
         b
           .setIcon("rotate-ccw")
-          .setTooltip(`恢复默认值 ${toShown(DEFAULTS[key])}${suffix}`)
+          .setTooltip(this.plugin.t("control.resetValue", { value: toShown(DEFAULTS[key]), unit: suffix }))
           .onClick(() => {
             this.plugin.settings[key] = DEFAULTS[key];
             comp.setValue(toShown(DEFAULTS[key]));
@@ -838,7 +857,7 @@ class FlraSettingTab extends PluginSettingTab {
       .addExtraButton((b) =>
         b
           .setIcon("rotate-ccw")
-          .setTooltip(`恢复默认值(${DEFAULTS[key] ? "开启" : "关闭"})`)
+          .setTooltip(this.plugin.t("control.resetToggle", { state: this.plugin.t(DEFAULTS[key] ? "state.on" : "state.off") }))
           .onClick(() => {
             this.plugin.settings[key] = DEFAULTS[key];
             comp.setValue(DEFAULTS[key]);
@@ -858,7 +877,7 @@ class FlraSettingTab extends PluginSettingTab {
     let text;
     // 程序性地同步控件时要屏蔽 onChange,否则会误触"切到自定义"的分支
     let syncing = false;
-    const options = easeOptionsFor(key);
+    const options = easeOptionsFor(key, (id) => this.plugin.t(id));
 
     /** 把两个控件和禁用态一起对齐到给定值 */
     const sync = (v) => {
@@ -873,11 +892,11 @@ class FlraSettingTab extends PluginSettingTab {
 
     const setting = new Setting(containerEl)
       .setName(name)
-      .setDesc("选「自定义」可手写 cubic-bezier(...)。");
+      .setDesc(this.plugin.t("ease.desc"));
 
     setting.addDropdown((d) => {
       dropdown = d;
-      d.addOption("", "自定义");
+      d.addOption("", this.plugin.t("ease.custom"));
       for (const [value, label] of Object.entries(options)) d.addOption(value, label);
       d.onChange((v) => {
         if (syncing) return;
@@ -911,7 +930,7 @@ class FlraSettingTab extends PluginSettingTab {
     setting.addExtraButton((b) =>
       b
         .setIcon("rotate-ccw")
-        .setTooltip("恢复默认曲线")
+        .setTooltip(this.plugin.t("ease.reset"))
         .onClick(() => {
           this.plugin.settings[key] = DEFAULTS[key];
           sync(DEFAULTS[key]);
@@ -926,17 +945,22 @@ class FlraSettingTab extends PluginSettingTab {
 /* ===== 用来试参数的测试弹窗 ===== */
 
 class PreviewModal extends Modal {
+  constructor(app, plugin) {
+    super(app);
+    this.plugin = plugin;
+  }
+
   onOpen() {
-    this.titleEl.setText("动画预览");
+    this.titleEl.setText(this.plugin.t("preview.title"));
     this.contentEl.createEl("p", {
-      text: "这是一个用来试参数的测试弹窗。按 Esc、点击外部区域或下面的按钮关闭,就能看到退场动画。",
+      text: this.plugin.t("preview.closeHint"),
     });
     this.contentEl.createEl("p", {
-      text: "参数改完立即生效,可以反复打开对比手感。",
+      text: this.plugin.t("preview.liveHint"),
     });
     new Setting(this.contentEl).addButton((b) =>
       b
-        .setButtonText("关闭")
+        .setButtonText(this.plugin.t("action.close"))
         .setCta()
         .onClick(() => this.close())
     );
@@ -950,8 +974,9 @@ class PreviewModal extends Modal {
 /* ===== 破坏性操作的确认弹窗 ===== */
 
 class ConfirmModal extends Modal {
-  constructor(app, opts) {
+  constructor(app, plugin, opts) {
     super(app);
+    this.plugin = plugin;
     this.opts = opts;
   }
 
@@ -960,7 +985,7 @@ class ConfirmModal extends Modal {
     this.contentEl.createEl("p", { text: this.opts.body });
 
     new Setting(this.contentEl)
-      .addButton((b) => b.setButtonText("取消").onClick(() => this.close()))
+      .addButton((b) => b.setButtonText(this.plugin.t("action.cancel")).onClick(() => this.close()))
       .addButton((b) =>
         b
           .setButtonText(this.opts.confirmText)
