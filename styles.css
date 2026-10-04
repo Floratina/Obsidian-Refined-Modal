@@ -331,8 +331,7 @@ body:not(.is-popout-window).flra-glass.flra-glass-tint .suggestion-container {
 
 /* ===== 8. 设置面板 ===== */
 
-/* 标签栏。刻意不做窄屏自动收折成图标那一套 —— 标签只有四个,
- * 收起来反而要靠猜。让它自然换行就够了。 */
+/* 标签保持文字，在窄面板中自然换行。 */
 .flra-tab-bar {
   display: flex;
   flex-wrap: wrap;
@@ -343,7 +342,10 @@ body:not(.is-popout-window).flra-glass.flra-glass-tint .suggestion-container {
   border-bottom: 2px solid var(--background-modifier-border);
 }
 
-.flra-tab {
+.flra-tab-bar > button.flra-tab {
+  height: auto;
+  box-shadow: none;
+  background: transparent;
   padding: 6px 14px;
   font-weight: 600;
   white-space: nowrap;
@@ -353,18 +355,106 @@ body:not(.is-popout-window).flra-glass.flra-glass-tint .suggestion-container {
   border-radius: 6px 6px 0 0;
 }
 
-.flra-tab:hover {
+.flra-tab-bar > button.flra-tab:hover {
   color: var(--text-normal);
   background-color: var(--background-modifier-hover);
 }
 
 /* 选中态压在分隔线上,做出「这一页连着下面内容」的效果 */
-.flra-tab.is-active {
+.flra-tab-bar > button.flra-tab.is-active {
   color: var(--text-normal);
   background-color: var(--background-primary);
   border-color: var(--background-modifier-border);
   border-bottom-color: var(--background-primary);
   transform: translateY(2px);
+}
+
+.flra-tab-bar > button.flra-tab:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -4px;
+}
+
+.flra-slider-value {
+  min-width: 5ch;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.flra-note-ease .setting-item-control {
+  flex-wrap: wrap;
+}
+
+.flra-note-ease input.flra-ease-input {
+  order: 1;
+  flex-basis: 100%;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ===== 笔记切换 ===== */
+
+/* 接管旧笔记片段的入场动画，关闭功能后自动恢复原片段。 */
+body.flra-note-anim .workspace-split.mod-root .workspace-leaf-content[data-type="markdown"] .markdown-preview-view,
+body.flra-note-anim .workspace-split.mod-root .workspace-leaf-content[data-type="markdown"] .cm-scroller {
+  animation: none !important;
+}
+
+/* 模式与 cssclasses 就绪前隐藏临时正文，旧页副本位于此 leaf 之外。 */
+.workspace-leaf.flra-note-pending .markdown-reading-view .markdown-preview-view,
+.workspace-leaf.flra-note-pending .markdown-source-view .cm-scroller {
+  opacity: 0 !important;
+}
+
+.flra-note-host {
+  position: relative;
+}
+
+.flra-note-layer {
+  position: absolute;
+  z-index: 10;
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout paint;
+}
+
+.flra-note-layer * {
+  pointer-events: none !important;
+  animation: none !important;
+  transition: none !important;
+  caret-color: transparent !important;
+}
+
+.flra-note-layer .flra-note-snapshot-frame,
+.flra-note-layer .flra-note-snapshot-viewport {
+  position: absolute !important;
+  box-sizing: border-box !important;
+  inset: auto !important;
+  flex: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+}
+
+.flra-note-layer .flra-note-snapshot-frame {
+  overflow: hidden !important;
+}
+
+.flra-note-layer > .flra-note-snapshot {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.flra-note-layer .cm-cursorLayer {
+  display: none;
+}
+
+.flra-note-clip {
+  overflow: hidden !important;
 }
 
 /* 曲线输入框:等宽字体更好对齐,也需要比默认更宽 */

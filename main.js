@@ -11,9 +11,12 @@
  */
 const { Plugin, PluginSettingTab, Setting, Modal, debounce, getLanguage } = require("obsidian");
 const { LANGUAGE_NAMES, normalizeLanguage, resolveLanguage, translate } = require("./i18n");
+const { NoteTransitions, NOTE_DEFAULTS, isValidNoteEasing } = require("./note-transitions");
 
 /* ===== 默认值:与 styles.css 里 body{} 那一块的初始值一一对应 ===== */
 const DEFAULTS = {
+  // 笔记切换
+  ...NOTE_DEFAULTS,
   // 背景
   bgBlurPixels: 15,
   bgDimOpacity: 0,
@@ -131,7 +134,17 @@ function parseDur(raw, fallback) {
 
 module.exports = class FlraAnimationHelper extends Plugin {
   async onload() {
-    this.settings = Object.assign({ language: "auto" }, DEFAULTS, await this.loadData());
+    const savedSettings = await this.loadData();
+    this.settings = Object.assign({ language: "auto" }, DEFAULTS, savedSettings);
+    // Restore the requested original CSS entrance once when introducing separate distances.
+    if (savedSettings?.noteModeDistance == null) {
+      this.settings.noteModeDuration = NOTE_DEFAULTS.noteModeDuration;
+      this.settings.noteModeDistance = NOTE_DEFAULTS.noteModeDistance;
+      this.settings.noteModeEase = NOTE_DEFAULTS.noteModeEase;
+    }
+    // The original snippet has no exit definition; preserve the existing fade-out settings.
+    if (savedSettings?.noteModeExitDuration == null) this.settings.noteModeExitDuration = this.settings.noteExitDuration;
+    if (savedSettings?.noteUnknownExitDuration == null) this.settings.noteUnknownExitDuration = this.settings.noteExitDuration;
     this.settings.language = normalizeLanguage(this.settings.language);
     this.refreshLanguage();
 
@@ -155,6 +168,10 @@ module.exports = class FlraAnimationHelper extends Plugin {
     this.setupPointerTracking();
     this.setupBodyObserver();
     this.patchModalClose();
+
+    this.noteTransitions = new NoteTransitions(this);
+    this.noteTransitions.start();
+    this.register(() => this.noteTransitions.destroy());
 
     this.addSettingTab(new FlraSettingTab(this.app, this));
   }
@@ -202,6 +219,7 @@ module.exports = class FlraAnimationHelper extends Plugin {
     if (!key) this.applyVars();
     else if (CLASS_KEYS.has(key)) this.applyBodyClasses();
     else this.applyVar(key);
+    if (!key || key.startsWith("note")) this.noteTransitions?.updateSettings();
     this.saveDebounced();
   }
 
@@ -417,6 +435,7 @@ module.exports = class FlraAnimationHelper extends Plugin {
  */
 
 const TABS = [
+  ["note", "tab.note"],
   ["bg", "tab.bg"],
   ["modal", "tab.modal"],
   ["menu", "tab.menu"],
@@ -436,19 +455,28 @@ class FlraSettingTab extends PluginSettingTab {
     this.plugin.refreshLanguage();
     this.flraRenderLanguage(containerEl);
 
-    this.flraRenderPreview(containerEl);
+    const preview = containerEl.createDiv();
+    this.flraRenderPreview(preview);
+    preview.toggle(this.flraActiveTab !== "note");
 
     const bar = containerEl.createDiv({ cls: "flra-tab-bar" });
     const body = containerEl.createDiv({ cls: "flra-tab-body" });
 
     for (const [id, label] of TABS) {
-      const tab = bar.createDiv({ cls: "flra-tab", text: this.plugin.t(label) });
+      const tab = bar.createEl("button", {
+        cls: "flra-tab", text: this.plugin.t(label),
+        attr: { type: "button", "aria-pressed": String(this.flraActiveTab === id) },
+      });
       tab.toggleClass("is-active", this.flraActiveTab === id);
       tab.addEventListener("click", () => {
         if (this.flraActiveTab === id) return;
         this.flraActiveTab = id;
         // 只重画标签状态和内容区,常驻的预览/重置不动
-        for (const el of Array.from(bar.children)) el.toggleClass("is-active", el === tab);
+        for (const el of Array.from(bar.children)) {
+          el.toggleClass("is-active", el === tab);
+          el.setAttribute("aria-pressed", String(el === tab));
+        }
+        preview.toggle(id !== "note");
         body.empty();
         this.flraRenderActiveTab(body);
       });
@@ -459,7 +487,8 @@ class FlraSettingTab extends PluginSettingTab {
   }
 
   flraRenderActiveTab(el) {
-    if (this.flraActiveTab === "bg") this.flraRenderBg(el);
+    if (this.flraActiveTab === "note") this.flraRenderNote(el);
+    else if (this.flraActiveTab === "bg") this.flraRenderBg(el);
     else if (this.flraActiveTab === "modal") this.flraRenderModal(el);
     else if (this.flraActiveTab === "menu") this.flraRenderMenu(el);
     else if (this.flraActiveTab === "glass") this.flraRenderGlass(el);
@@ -526,6 +555,42 @@ class FlraSettingTab extends PluginSettingTab {
   }
 
   /* ===== 各标签页内容 ===== */
+
+  flraRenderNote(el) {
+    this.flraToggle(el, {
+      name: this.plugin.t("note.enabled.name"),
+      desc: this.plugin.t("note.enabled.desc"),
+      key: "noteAnimEnabled",
+    });
+    const groups = [
+      { prefix: "note", heading: "note.section.files", entrance: "note.duration.desc", exit: "note.exit.desc" },
+      { prefix: "noteUnknown", heading: "note.section.unknown", entrance: "note.unknown.duration.desc", exit: "note.exit.desc" },
+      { prefix: "noteMode", heading: "note.section.modes", entrance: "note.mode.duration.desc", exit: "note.mode.exit.desc" },
+    ];
+    for (const group of groups) {
+      new Setting(el).setName(this.plugin.t(group.heading)).setHeading();
+      this.flraSlider(el, {
+        name: this.plugin.t("note.duration.name"), desc: this.plugin.t(group.entrance),
+        key: group.prefix + "Duration", min: 0, max: 600, step: 10, suffix: "ms", showValue: true,
+      });
+      this.flraSlider(el, {
+        name: this.plugin.t("note.exit.name"), desc: this.plugin.t(group.exit),
+        key: group.prefix + "ExitDuration", min: 0, max: 600, step: 10, suffix: "ms", showValue: true,
+      });
+      this.flraSlider(el, {
+        name: this.plugin.t("note.distance.name"), desc: this.plugin.t("note.distance.desc"),
+        key: group.prefix + "Distance", min: 0, max: 60, step: 1, suffix: "px", showValue: true,
+      });
+      this.flraEase(el, {
+        name: this.plugin.t("note.ease.name"), desc: this.plugin.t("note.ease.desc"),
+        key: group.prefix + "Ease", compact: true, validate: isValidNoteEasing,
+        presets: {
+          [NOTE_DEFAULTS.noteEase]: this.plugin.t("ease.default"),
+          ease: this.plugin.t("note.ease.soft"),
+        },
+      });
+    }
+  }
 
   flraRenderBg(el) {
     this.flraSlider(el, {
@@ -810,12 +875,13 @@ class FlraSettingTab extends PluginSettingTab {
    * 数值滑块 + 重置按钮。
    * scale 用于「界面按百分比显示、内部按倍数存储」:界面值 = 存储值 * scale。
    */
-  flraSlider(containerEl, { name, desc, key, min, max, step, scale = 1, suffix = "" }) {
+  flraSlider(containerEl, { name, desc, key, min, max, step, scale = 1, suffix = "", showValue = false }) {
     // 浮点误差:1.005 * 100 === 100.49999999999999,不修一下滑块会落在错的档位
     const toShown = (stored) => Math.round(stored * scale * 1000) / 1000;
-    let comp;
+    let comp, valueEl;
+    const updateValue = () => valueEl?.setText(`${toShown(this.plugin.settings[key])} ${suffix}`.trim());
 
-    new Setting(containerEl)
+    const setting = new Setting(containerEl)
       .setName(name)
       .setDesc(suffix ? this.plugin.t("control.unit", { description: desc, unit: suffix }) : desc)
       .addSlider((s) => {
@@ -825,6 +891,7 @@ class FlraSettingTab extends PluginSettingTab {
           .setDynamicTooltip()
           .onChange((v) => {
             this.plugin.settings[key] = scale === 1 ? v : v / scale;
+            updateValue();
             this.plugin.applyAndSave(key);
           });
       })
@@ -835,9 +902,15 @@ class FlraSettingTab extends PluginSettingTab {
           .onClick(() => {
             this.plugin.settings[key] = DEFAULTS[key];
             comp.setValue(toShown(DEFAULTS[key]));
+            updateValue();
             this.plugin.applyAndSave(key);
           })
       );
+    if (showValue) {
+      valueEl = setting.controlEl.createEl("output", { cls: "flra-slider-value" });
+      setting.controlEl.insertBefore(valueEl, comp.sliderEl.nextSibling);
+      updateValue();
+    }
   }
 
   /** 布尔开关 + 重置按钮 */
@@ -872,12 +945,12 @@ class FlraSettingTab extends PluginSettingTab {
    * 选中具名预设时文本框锁定(只读展示),选「自定义」才解锁手写。
    * 这样就不会出现"下拉显示某预设、文本框却是别的值"的错位状态。
    */
-  flraEase(containerEl, { name, key }) {
+  flraEase(containerEl, { name, key, desc, presets, compact = false, validate }) {
     let dropdown;
     let text;
     // 程序性地同步控件时要屏蔽 onChange,否则会误触"切到自定义"的分支
     let syncing = false;
-    const options = easeOptionsFor(key, (id) => this.plugin.t(id));
+    const options = presets ?? easeOptionsFor(key, (id) => this.plugin.t(id));
 
     /** 把两个控件和禁用态一起对齐到给定值 */
     const sync = (v) => {
@@ -886,23 +959,27 @@ class FlraSettingTab extends PluginSettingTab {
       dropdown.setValue(preset ? v : "");
       text.setValue(v);
       text.setDisabled(preset);
+      if (compact) text.inputEl.toggle(!preset);
       text.inputEl.removeClass("flra-invalid");
       syncing = false;
     };
 
     const setting = new Setting(containerEl)
       .setName(name)
-      .setDesc(this.plugin.t("ease.desc"));
+      .setDesc(desc ?? this.plugin.t("ease.desc"));
+    if (compact) setting.settingEl.addClass("flra-note-ease");
 
     setting.addDropdown((d) => {
       dropdown = d;
-      d.addOption("", this.plugin.t("ease.custom"));
+      if (!presets) d.addOption("", this.plugin.t("ease.custom"));
       for (const [value, label] of Object.entries(options)) d.addOption(value, label);
+      if (presets) d.addOption("", this.plugin.t("ease.custom"));
       d.onChange((v) => {
         if (syncing) return;
         if (!v) {
           // 切到自定义:解锁输入框,值先保持不变,等用户改
           text.setDisabled(false);
+          if (compact) text.inputEl.show();
           text.inputEl.focus();
           return;
         }
@@ -917,7 +994,7 @@ class FlraSettingTab extends PluginSettingTab {
       t.setPlaceholder("cubic-bezier(.25,.1,.25,1)").onChange((v) => {
         if (syncing) return;
         const val = v.trim();
-        const ok = val !== "" && CSS.supports("transition-timing-function", val);
+        const ok = val !== "" && (validate ? validate(val) : CSS.supports("transition-timing-function", val));
         t.inputEl.toggleClass("flra-invalid", !ok);
         // 非法值不写入,保留上一个能用的值
         if (!ok) return;
