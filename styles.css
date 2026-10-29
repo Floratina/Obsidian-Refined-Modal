@@ -383,3 +383,224 @@ body:not(.is-popout-window).flra-glass.flra-glass-tint .suggestion-container {
 .flra-invalid {
   border-color: var(--text-error) !important;
 }
+
+/* ===== Notebook Navigator hover drawer ===== */
+@media (hover: hover) and (pointer: fine) {
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer {
+        --flra-nn-card-top: calc(var(--flra-nn-button-height) + var(--flra-nn-button-card-gap));
+        --flra-nn-effective-height: min(var(--flra-nn-drawer-height), calc(100% - var(--flra-nn-offset-top) - var(--flra-nn-bottom-gap)));
+        --flra-nn-hide-after: calc(0ms + max(var(--flra-nn-exit-fade-duration), var(--flra-nn-exit-slide-duration), var(--flra-nn-exit-scale-duration)));
+        --flra-nn-glass-surface: color-mix(in srgb, var(--flra-nn-card-surface) calc(100% - (100% - var(--flra-nn-glass-opacity)) * var(--flra-nn-glass-enabled)), transparent);
+        --flra-nn-glass-filter:
+            blur(calc(var(--flra-nn-glass-blur) * var(--flra-nn-glass-enabled)))
+            brightness(calc(1 + (var(--flra-nn-glass-brightness) - 1) * var(--flra-nn-glass-enabled)))
+            contrast(calc(1 + (var(--flra-nn-glass-contrast) - 1) * var(--flra-nn-glass-enabled)))
+            saturate(calc(1 + (var(--flra-nn-glass-saturation) - 1) * var(--flra-nn-glass-enabled)));
+        position: relative;
+        isolation: isolate;
+    }
+
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .nn-list-pane {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+    }
+
+    /* 保留目录树尺寸供虚拟滚动测量，通过裁剪控制整张卡片的展开方向。 */
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .nn-navigation-pane {
+        position: absolute;
+        inset: var(--flra-nn-offset-top) auto auto var(--flra-nn-offset-left);
+        z-index: var(--flra-nn-layer);
+        box-sizing: border-box;
+        width: min(var(--flra-nn-drawer-width), calc(100% - var(--flra-nn-exit-strip) - var(--flra-nn-offset-left))) !important;
+        min-width: 0;
+        /* 覆盖插件行内的 height: 100%，与独立玻璃背板使用同一高度。 */
+        height: var(--flra-nn-effective-height) !important;
+        min-height: 0;
+        max-height: calc(100% - var(--flra-nn-offset-top) - var(--flra-nn-bottom-gap));
+        padding: calc(var(--flra-nn-card-top) + var(--flra-nn-padding-top)) var(--flra-nn-padding-inline) var(--flra-nn-padding-bottom);
+        border: 0;
+        background: transparent;
+        overflow: visible;
+        pointer-events: none;
+        clip-path: inset(0 0 100% 0);
+        transition: clip-path var(--flra-nn-exit-slide-duration) var(--flra-nn-exit-easing) 0ms;
+    }
+
+    /* 玻璃表面与目录并列，避开目录裁剪层对背后画面取样的限制。 */
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer::after {
+        content: "";
+        position: absolute;
+        top: calc(var(--flra-nn-offset-top) + var(--flra-nn-card-top));
+        left: var(--flra-nn-offset-left);
+        width: min(var(--flra-nn-drawer-width), calc(100% - var(--flra-nn-exit-strip) - var(--flra-nn-offset-left)));
+        height: max(0px, calc(var(--flra-nn-effective-height) - var(--flra-nn-card-top)));
+        box-sizing: border-box;
+        z-index: calc(var(--flra-nn-layer) - 2);
+        border: var(--flra-nn-card-border-width) solid var(--flra-nn-card-border-color);
+        border-radius: var(--flra-nn-card-radius);
+        background: var(--flra-nn-glass-surface);
+        -webkit-backdrop-filter: var(--flra-nn-glass-filter);
+        backdrop-filter: var(--flra-nn-glass-filter);
+        box-shadow: var(--flra-nn-card-shadow);
+        pointer-events: none;
+        opacity: 0;
+        visibility: hidden;
+        translate: 0 calc(-1 * var(--flra-nn-slide-distance));
+        scale: var(--flra-nn-closed-scale);
+        transform-origin: var(--flra-nn-scale-origin);
+        clip-path: inset(calc(-1 * var(--flra-nn-shadow-space)) calc(-1 * var(--flra-nn-shadow-space)) 100% calc(-1 * var(--flra-nn-shadow-space)));
+        transition:
+            opacity var(--flra-nn-exit-fade-duration) var(--flra-nn-exit-easing) 0ms,
+            translate var(--flra-nn-exit-slide-duration) var(--flra-nn-exit-easing) 0ms,
+            scale var(--flra-nn-exit-scale-duration) var(--flra-nn-exit-easing) 0ms,
+            clip-path var(--flra-nn-exit-slide-duration) var(--flra-nn-exit-easing) 0ms,
+            visibility 0s linear var(--flra-nn-hide-after);
+    }
+
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer.flra-nn-open::after {
+        opacity: 1;
+        visibility: visible;
+        translate: 0 0;
+        scale: 1;
+        clip-path: inset(calc(-1 * var(--flra-nn-shadow-space)));
+        transition:
+            opacity var(--flra-nn-enter-fade-duration) var(--flra-nn-enter-easing) 0ms,
+            translate var(--flra-nn-enter-slide-duration) var(--flra-nn-enter-easing) 0ms,
+            scale var(--flra-nn-enter-scale-duration) var(--flra-nn-enter-easing) 0ms,
+            clip-path var(--flra-nn-enter-slide-duration) var(--flra-nn-enter-easing) 0ms,
+            visibility 0s linear 0ms;
+    }
+
+    /* 清除容器底色，让同一块玻璃透出；保留文件夹配色及选中、悬停背景。 */
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .nn-navigation-pane :is(
+        .nn-navigation-pane-chrome,
+        .nn-navigation-pane-panel,
+        .nn-navigation-pane-scroller,
+        .nn-navigation-pane-content,
+        .nn-pane-header,
+        .nn-shortcut-pinned,
+        .nn-vault-title-area,
+        .nn-navigation-calendar-overlay
+    ) {
+        background-color: transparent;
+    }
+
+    /* translate 与 scale 独立计时，避免多段动效争用同一个 transform。 */
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .nn-navigation-pane > * {
+        opacity: 0;
+        visibility: hidden;
+        translate: 0 calc(-1 * var(--flra-nn-slide-distance));
+        scale: var(--flra-nn-closed-scale);
+        transform-origin: var(--flra-nn-scale-origin);
+        transition:
+            opacity var(--flra-nn-exit-fade-duration) var(--flra-nn-exit-easing) 0ms,
+            translate var(--flra-nn-exit-slide-duration) var(--flra-nn-exit-easing) 0ms,
+            scale var(--flra-nn-exit-scale-duration) var(--flra-nn-exit-easing) 0ms,
+            visibility 0s linear var(--flra-nn-hide-after);
+    }
+
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .nn-navigation-pane > * {
+        position: relative;
+        z-index: 1;
+        min-width: 0;
+        border-radius: var(--flra-nn-content-radius);
+        overflow: hidden;
+        pointer-events: none;
+    }
+
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer.flra-nn-open > .nn-navigation-pane {
+        /* 鼠标在卡片内或目录项目的右键菜单仍打开时，保持展开。 */
+        pointer-events: auto;
+        clip-path: inset(calc(-1 * var(--flra-nn-shadow-space)));
+        transition: clip-path var(--flra-nn-enter-slide-duration) var(--flra-nn-enter-easing) 0ms;
+    }
+
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer.flra-nn-open > .nn-navigation-pane > * {
+        pointer-events: auto;
+        opacity: 1;
+        visibility: visible;
+        translate: 0 0;
+        scale: 1;
+        transition:
+            opacity var(--flra-nn-enter-fade-duration) var(--flra-nn-enter-easing) 0ms,
+            translate var(--flra-nn-enter-slide-duration) var(--flra-nn-enter-easing) 0ms,
+            scale var(--flra-nn-enter-scale-duration) var(--flra-nn-enter-easing) 0ms,
+            visibility 0s linear 0ms;
+    }
+
+
+    /* 按钮尺寸改变时，文件栏工具栏同步让出空间。 */
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .nn-list-pane > .nn-list-pane-chrome .nn-pane-header {
+        padding-left: calc(var(--flra-nn-offset-left) + var(--flra-nn-button-width) + var(--flra-nn-toolbar-gap));
+    }
+
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer .nn-resize-handle {
+        display: none;
+    }
+}
+
+/* 跟随系统的“减少动态效果”设置，保留移开后的等待时间。 */
+@media (prefers-reduced-motion: reduce) {
+    body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer {
+        --flra-nn-enter-fade-duration: 0ms !important;
+        --flra-nn-enter-slide-duration: 0ms !important;
+        --flra-nn-enter-scale-duration: 0ms !important;
+        --flra-nn-exit-fade-duration: 0ms !important;
+        --flra-nn-exit-slide-duration: 0ms !important;
+        --flra-nn-exit-scale-duration: 0ms !important;
+        --flra-nn-button-duration: 0ms !important;
+    }
+}
+
+/* The real button remains in the toolbar while the card opens beneath it. */
+body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .flra-nn-trigger {
+    position: absolute;
+    top: calc((var(--flra-nn-toolbar-height) - var(--flra-nn-button-height)) / 2 + var(--flra-nn-button-offset-y));
+    left: var(--flra-nn-offset-left);
+    z-index: calc(var(--flra-nn-layer) + 1);
+    width: var(--flra-nn-button-width);
+    height: var(--flra-nn-button-height);
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--flra-nn-button-radius);
+    background: transparent;
+    box-shadow: none;
+    cursor: pointer;
+    transition: background-color var(--flra-nn-button-duration) var(--flra-nn-button-easing);
+}
+body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .flra-nn-trigger > .flra-nn-trigger-icon {
+    display: block;
+    width: var(--flra-nn-button-icon-size);
+    height: var(--flra-nn-button-icon-size);
+    background-color: var(--flra-nn-button-color);
+    opacity: var(--flra-nn-button-opacity);
+    -webkit-mask: var(--flra-nn-button-icon) center / contain no-repeat;
+    mask: var(--flra-nn-button-icon) center / contain no-repeat;
+    pointer-events: none;
+    transition: background-color var(--flra-nn-button-duration) var(--flra-nn-button-easing), opacity var(--flra-nn-button-duration) var(--flra-nn-button-easing);
+}
+body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .flra-nn-trigger:is(:hover, :focus-visible),
+body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer.flra-nn-drag-over > .flra-nn-trigger {
+    background-color: var(--flra-nn-button-hover-bg);
+}
+body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .flra-nn-trigger:is(:hover, :focus-visible) > .flra-nn-trigger-icon,
+body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer.flra-nn-drag-over > .flra-nn-trigger > .flra-nn-trigger-icon {
+    background-color: var(--flra-nn-button-hover-color);
+    opacity: var(--flra-nn-button-hover-opacity);
+}
+body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .flra-nn-trigger:focus-visible {
+    outline: 2px solid var(--interactive-accent);
+    outline-offset: 2px;
+}
+.flra-nn-settings .setting-item-control { flex-wrap: wrap; }
+.flra-nn-settings .flra-nn-number { width: 6.5em; }
+.flra-nn-settings .flra-nn-value { width: min(20em, 100%); font-family: var(--font-monospace); }
+.flra-nn-unit { color: var(--text-muted); min-width: 1.4em; }
+.flra-nn-details { margin: 1em 0; }
+.flra-nn-details > summary { cursor: pointer; font-weight: var(--font-semibold); padding: 0.5em 0; }

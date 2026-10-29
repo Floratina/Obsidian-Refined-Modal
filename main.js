@@ -11,9 +11,12 @@
  */
 const { Plugin, PluginSettingTab, Setting, Modal, debounce, getLanguage } = require("obsidian");
 const { LANGUAGE_NAMES, normalizeLanguage, resolveLanguage, translate } = require("./i18n");
+const { NotebookNavigatorDrawer } = require("./notebook-navigator");
+const { NAVIGATOR_GROUPS, NAVIGATOR_DEFAULTS, NAVIGATOR_KEYS, validNavigatorValue, normalizeNavigatorSettings } = require("./notebook-navigator-settings");
 
 /* ===== 默认值:与 styles.css 里 body{} 那一块的初始值一一对应 ===== */
 const DEFAULTS = {
+  ...NAVIGATOR_DEFAULTS,
   // 背景
   bgBlurPixels: 15,
   bgDimOpacity: 0,
@@ -133,6 +136,7 @@ module.exports = class FlraAnimationHelper extends Plugin {
   async onload() {
     this.settings = Object.assign({ language: "auto" }, DEFAULTS, await this.loadData());
     this.settings.language = normalizeLanguage(this.settings.language);
+    normalizeNavigatorSettings(this.settings, document.defaultView.CSS);
     this.refreshLanguage();
 
     // 每个僵尸副本对应一个 kill 函数,卸载时统一清场
@@ -156,11 +160,17 @@ module.exports = class FlraAnimationHelper extends Plugin {
     this.setupBodyObserver();
     this.patchModalClose();
 
+    this.navigatorDrawer = new NotebookNavigatorDrawer(this, document);
+    this.register(() => this.navigatorDrawer.destroy());
+    this.app.workspace.onLayoutReady(() => this.navigatorDrawer.refresh());
+    this.registerEvent(this.app.workspace.on("layout-change", () => this.navigatorDrawer.scheduleScan()));
+
     this.addSettingTab(new FlraSettingTab(this.app, this));
   }
 
   refreshLanguage() {
     this.language = resolveLanguage(this.settings.language, getLanguage);
+    this.navigatorDrawer?.refresh();
   }
 
   t(key, values) {
@@ -202,6 +212,7 @@ module.exports = class FlraAnimationHelper extends Plugin {
     if (!key) this.applyVars();
     else if (CLASS_KEYS.has(key)) this.applyBodyClasses();
     else this.applyVar(key);
+    if (!key || NAVIGATOR_KEYS.has(key)) this.navigatorDrawer?.refresh();
     this.saveDebounced();
   }
 
@@ -421,6 +432,7 @@ const TABS = [
   ["modal", "tab.modal"],
   ["menu", "tab.menu"],
   ["glass", "tab.glass"],
+  ["navigator", "tab.navigator"],
 ];
 
 class FlraSettingTab extends PluginSettingTab {
@@ -428,6 +440,7 @@ class FlraSettingTab extends PluginSettingTab {
     super(app, plugin);
     this.plugin = plugin;
     this.flraActiveTab = TABS[0][0];
+    this.flraNavigatorSections = new Map();
   }
 
   display() {
@@ -459,10 +472,12 @@ class FlraSettingTab extends PluginSettingTab {
   }
 
   flraRenderActiveTab(el) {
+    el.toggleClass("flra-nn-settings", this.flraActiveTab === "navigator");
     if (this.flraActiveTab === "bg") this.flraRenderBg(el);
     else if (this.flraActiveTab === "modal") this.flraRenderModal(el);
     else if (this.flraActiveTab === "menu") this.flraRenderMenu(el);
     else if (this.flraActiveTab === "glass") this.flraRenderGlass(el);
+    else if (this.flraActiveTab === "navigator") this.flraRenderNavigator(el);
   }
 
   /* ===== 常驻区 ===== */
@@ -802,6 +817,78 @@ class FlraSettingTab extends PluginSettingTab {
       scale: 100,
       suffix: "%",
     });
+  }
+
+  flraRenderNavigator(el) {
+    const t = (key) => this.plugin.t(key);
+    el.addClass("flra-nn-settings");
+    el.createEl("p", { cls: "setting-item-description", text: t("nn.intro") });
+    for (const group of NAVIGATOR_GROUPS) {
+      let target = el;
+      if (group.collapsed) {
+        const details = el.createEl("details", { cls: "flra-nn-details" });
+        details.open = this.flraNavigatorSections.get(group.id) ?? false;
+        details.createEl("summary", { text: t(`nn.group.${group.id}`) });
+        details.addEventListener("toggle", () => this.flraNavigatorSections.set(group.id, details.open));
+        target = details;
+      } else {
+        new Setting(target).setName(t(`nn.group.${group.id}`)).setHeading();
+      }
+      for (const option of group.options) {
+        const name = t(`nn.${option.key}.name`);
+        const desc = t(`nn.${option.key}.desc`);
+        if (option.type === "toggle") {
+          this.flraToggle(target, { name, desc, key: option.key });
+          continue;
+        }
+        const setting = new Setting(target).setName(name).setDesc(desc);
+        let control;
+        const sync = () => {
+          control.setValue(String(this.plugin.settings[option.key]));
+          control.inputEl.removeClass("flra-invalid");
+          control.inputEl.removeAttribute("aria-invalid");
+        };
+        setting.addText((input) => {
+          control = input;
+          input.inputEl.addClass(option.type === "number" ? "flra-nn-number" : "flra-nn-value");
+          input.inputEl.setAttribute("aria-label", name);
+          if (option.type === "number") {
+            input.inputEl.type = "number";
+            input.inputEl.min = String(option.min);
+            input.inputEl.max = String(option.max);
+            input.inputEl.step = String(option.step);
+          }
+          const commit = () => {
+            const raw = input.getValue().trim();
+            if (!raw) { sync(); return; }
+            let value = raw;
+            if (option.type === "number") {
+              value = Number(raw);
+              if (Number.isFinite(value)) value = Math.min(option.max, Math.max(option.min, value));
+            }
+            const valid = validNavigatorValue(option, value, el.ownerDocument.defaultView.CSS);
+            input.inputEl.toggleClass("flra-invalid", !valid);
+            input.inputEl.setAttribute("aria-invalid", String(!valid));
+            if (!valid) return;
+            this.plugin.settings[option.key] = value;
+            this.plugin.applyAndSave(option.key);
+            sync();
+          };
+          input.inputEl.addEventListener("blur", commit);
+          input.inputEl.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") { event.preventDefault(); commit(); }
+          });
+          sync();
+        });
+        if (option.unit) setting.controlEl.createSpan({ cls: "flra-nn-unit", text: option.unit });
+        setting.addExtraButton((button) => button.setIcon("rotate-ccw").setTooltip(t("nn.reset"))
+          .onClick(() => {
+            this.plugin.settings[option.key] = option.value;
+            sync();
+            this.plugin.applyAndSave(option.key);
+          }));
+      }
+    }
   }
 
   /* ===== 控件辅助方法 ===== */

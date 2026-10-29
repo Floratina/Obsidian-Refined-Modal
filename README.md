@@ -64,9 +64,17 @@ With **Keep original background color** enabled, **Background color opacity** co
 
 **Background blur and frosted glass blur are separate settings**: the former changes the workspace behind a modal, while the latter changes the background seen through a modal or menu.
 
+### Notebook Navigator hover navigation
+
+Keep the file list visible and hover over the upper-left sidebar icon to open navigation as a rounded card. The card closes after the pointer leaves, or after selecting any folder once the file list has updated. Clicking an expand or collapse arrow keeps the card open for further browsing. The card also stays open while a navigation item's context menu is in use.
+
+Drag a file from the file list or system file manager over the icon to open navigation after a short delay. Continue into the card to drop it onto a folder through Notebook Navigator. The card closes after dropping the file or cancelling the drag. Adjust the delays, card layout, colors, shadow, icon, animations, and independent frosted glass settings.
+
+Use Notebook Navigator's horizontal dual-pane layout with narrow-sidebar behavior set to none. This feature appears in the desktop left sidebar. Disable the old `notebook-navigator-hover-navigation` CSS snippet when using it. Turn off **Enable hover navigation** in Refined Modal to restore the original layout.
+
 ## Settings and preview
 
-Open **Settings → Refined Modal** to customize the effects. Settings are organized into four tabs, apply immediately, and save automatically.
+Open **Settings → Refined Modal** to customize the effects. Settings are organized into five tabs and save automatically. Notebook Navigator number and text fields apply on `Enter` or blur; empty fields restore the current value, and out-of-range numbers are clamped to the nearest allowed value.
 
 | Tab | Available controls |
 | --- | --- |
@@ -74,6 +82,7 @@ Open **Settings → Refined Modal** to customize the effects. Settings are organ
 | Modals | Opening and closing durations, starting and final sizes, and their easing curves. |
 | Context menus | Animation toggle; fade, slide, and scale durations; slide distance; sizes; closing settings; and easing curves. |
 | Frosted glass | Effect toggle, original background color and its opacity, blur, brightness, contrast, and saturation. |
+| Notebook Navigator | Hover and drag opening, delays, card layout, independent glass, animations, colors, and trigger icon. |
 
 Select **Open preview** near the top of the settings page to see the modal's opening animation. Press `Esc`, click outside the modal, or select **Close** to see its closing animation. After changing a setting, reopen the preview to compare the result.
 
