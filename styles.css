@@ -389,6 +389,8 @@ body:not(.is-popout-window).flra-glass.flra-glass-tint .suggestion-container {
     body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer {
         --flra-nn-card-top: calc(var(--flra-nn-button-height) + var(--flra-nn-button-card-gap));
         --flra-nn-effective-height: min(var(--flra-nn-drawer-height), calc(100% - var(--flra-nn-offset-top) - var(--flra-nn-bottom-gap)));
+        --flra-nn-card-offset-top: calc(var(--flra-nn-offset-top) + var(--flra-nn-card-top));
+        --flra-nn-card-height: max(0px, calc(var(--flra-nn-effective-height) - var(--flra-nn-card-top)));
         --flra-nn-hide-after: calc(0ms + max(var(--flra-nn-exit-fade-duration), var(--flra-nn-exit-slide-duration), var(--flra-nn-exit-scale-duration)));
         --flra-nn-glass-surface: color-mix(in srgb, var(--flra-nn-card-surface) calc(100% - (100% - var(--flra-nn-glass-opacity)) * var(--flra-nn-glass-enabled)), transparent);
         --flra-nn-glass-filter:
@@ -406,24 +408,25 @@ body:not(.is-popout-window).flra-glass.flra-glass-tint .suggestion-container {
         min-width: 0;
     }
 
-    /* 保留目录树尺寸供虚拟滚动测量，通过裁剪控制整张卡片的展开方向。 */
+    /* 目录容器与玻璃背板对齐，工具栏和卡片之间的空隙不接收鼠标。
+     * 保留目录树尺寸供虚拟滚动测量，通过裁剪控制整张卡片的展开方向。 */
     body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer > .nn-navigation-pane {
         position: absolute;
-        inset: var(--flra-nn-offset-top) auto auto var(--flra-nn-offset-left);
+        inset: var(--flra-nn-card-offset-top) auto auto var(--flra-nn-offset-left);
         z-index: var(--flra-nn-layer);
         box-sizing: border-box;
         width: min(var(--flra-nn-drawer-width), calc(100% - var(--flra-nn-exit-strip) - var(--flra-nn-offset-left))) !important;
         min-width: 0;
         /* 覆盖插件行内的 height: 100%，与独立玻璃背板使用同一高度。 */
-        height: var(--flra-nn-effective-height) !important;
+        height: var(--flra-nn-card-height) !important;
         min-height: 0;
-        max-height: calc(100% - var(--flra-nn-offset-top) - var(--flra-nn-bottom-gap));
-        padding: calc(var(--flra-nn-card-top) + var(--flra-nn-padding-top)) var(--flra-nn-padding-inline) var(--flra-nn-padding-bottom);
+        max-height: var(--flra-nn-card-height);
+        padding: var(--flra-nn-padding-top) var(--flra-nn-padding-inline) var(--flra-nn-padding-bottom);
         border: 0;
         background: transparent;
         overflow: visible;
         pointer-events: none;
-        clip-path: inset(0 0 100% 0);
+        clip-path: inset(0 0 100% 0 round var(--flra-nn-card-radius));
         transition: clip-path var(--flra-nn-exit-slide-duration) var(--flra-nn-exit-easing) 0ms;
     }
 
@@ -431,10 +434,10 @@ body:not(.is-popout-window).flra-glass.flra-glass-tint .suggestion-container {
     body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer::after {
         content: "";
         position: absolute;
-        top: calc(var(--flra-nn-offset-top) + var(--flra-nn-card-top));
+        top: var(--flra-nn-card-offset-top);
         left: var(--flra-nn-offset-left);
         width: min(var(--flra-nn-drawer-width), calc(100% - var(--flra-nn-exit-strip) - var(--flra-nn-offset-left)));
-        height: max(0px, calc(var(--flra-nn-effective-height) - var(--flra-nn-card-top)));
+        height: var(--flra-nn-card-height);
         box-sizing: border-box;
         z-index: calc(var(--flra-nn-layer) - 2);
         border: var(--flra-nn-card-border-width) solid var(--flra-nn-card-border-color);
@@ -512,7 +515,8 @@ body:not(.is-popout-window).flra-glass.flra-glass-tint .suggestion-container {
     body:not(.is-mobile) .mod-left-split .nn-split-container.flra-nn-drawer.flra-nn-open > .nn-navigation-pane {
         /* 鼠标在卡片内或目录项目的右键菜单仍打开时，保持展开。 */
         pointer-events: auto;
-        clip-path: inset(calc(-1 * var(--flra-nn-shadow-space)));
+        /* 阴影由独立背板绘制；目录内容及鼠标响应始终限制在卡片内。 */
+        clip-path: inset(0 round var(--flra-nn-card-radius));
         transition: clip-path var(--flra-nn-enter-slide-duration) var(--flra-nn-enter-easing) 0ms;
     }
 
